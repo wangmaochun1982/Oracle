@@ -1,0 +1,228 @@
+Oracle  网络配置
+
+服务器端 -- 客户端
+
+客户端配置概况：
+$ORACLE_HOME/network/admin/tnsnames.ora
+	连接名：连接到哪个数据库（hostname/IP、Port、服务名/实例名）
+	
+服务器端配置概况：
+$ORACLE_HOME/network/admin/listener.ora
+	监听位置：hostname/IP、Port
+	注册：服务名 -- 实例名
+	
+服务器端配置：
+方法一：
+	直接编辑配置文件
+	$ORACLE_HOME/network/admin/listener.ora
+
+方法二：
+	通过
+	Network Manager
+	管理
+===创建监听===
+Local--LISTENER--左侧加号，创建监听
+# 配置监听地址
+	Listening Location -- Add Address
+# 静态注册数据库服务
+	切换Listening Location为Database Service，添加数据库服务。
+# 保存配置
+	File -- Save Network Configuration
+
+查看监听配置文件
+	cd $ORACLE_HOME/network/admin/
+	cat listener.ora
+
+管理非默认监听
+	lsnrctl start LISTENER1
+	lsnrctl status LISTENER1
+	lsnrctl stop LISTENER1
+	lsnrctl reload LISTENER1
+	
+	
+===动态注册===
+Services Summary...
+Service "ORCL" has 1 instance(s).
+  Instance "ORCL", status READY, has 1 handler(s) for this service...
+status READY/BLOCK：动态注册的表现
+	动态注册：数据库启动时，PMON进程根据本实例的服务名，将本实例注册到本地监听。
+	
+	service_names                        string      ORCL
+	db_unique_name                       string      ORCL
+	db_name                              string      ORCL
+	db_domain                            string
+	local_listener                       string
+
+Services Summary...
+Service "ORCLCW" has 1 instance(s).
+  Instance "ORCL", status UNKNOWN, has 1 handler(s) for this service...
+Service "ORCLSRV" has 1 instance(s).
+  Instance "ORCL", status UNKNOWN, has 1 handler(s) for this service...	
+===静态注册===
+status UNKNOWN：    静态注册的表现
+
+listener.ora配置案例
+==========================================================
+LISTENER =
+  (DESCRIPTION =
+    (ADDRESS = (PROTOCOL = TCP)(HOST = db11)(PORT = 1521))
+  )
+
+ADR_BASE_LISTENER = /u01/app/oracle
+
+LISTENER1 =
+  (DESCRIPTION =
+    (ADDRESS = (PROTOCOL = TCP)(HOST = db11)(PORT = 1522))
+  )
+
+SID_LIST_LISTENER1 =
+  (SID_LIST =
+    (SID_DESC =
+      (GLOBAL_DBNAME = ORCLSRV)
+      (ORACLE_HOME = /u01/app/oracle/product/11.2.0/db_1)
+      (SID_NAME = ORCL)
+    )
+    (SID_DESC =
+      (GLOBAL_DBNAME = ORCLCW)
+      (ORACLE_HOME = /u01/app/oracle/product/11.2.0/db_1)
+      (SID_NAME = ORCL)
+    )
+  )
+
+ADR_BASE_LISTENER1 = /u01/app/oracle
+==========================================================
+
+动态注册和静态注册的差别：
+1. 动态注册，在实例启动的时候进行注册；
+   静态注册，在监听启动的时候，注册就已经完成，和实例的状态无关。
+   所以通过动态注册不能通过监听远程启动数据库。
+       RMAN数据库复制，需要静态注册，以远程启动数据库。
+2. 可管理性，
+   动态注册配置比较固定
+   静态注册配置比较灵活
+   在RAC中，经常需要为应用/模块指定首选连接的节点，可以使用静态注册来指定。
+   
+==客户端配置==
+简便连接：
+	不需要配置，直接在访问的时候指定所有信息
+	sqlplus 用户名/密码@主机名:端口号/服务名
+	sqlplus scott/tiger@192.168.56.111:1521/ORCL
+	sqlplus scott/tiger@192.168.56.111:1522/ORCLSRV
+	sqlplus scott/tiger@192.168.56.111:1522/ORCLCW
+
+本地命名：
+	将连接信息保存到配置文件中
+	$ORACLE_HOME/network/admin/tnsnames.ora
+	
+	Network Manager
+	Local--Service Naming--左侧加号，添加新的本地命名
+	
+	本地命名 -- 随便取
+	服务命名 -- 远程数据库服务名
+	
+	sqlplus scott/tiger@orcl
+	sqlplus scott/tiger@orclcw
+	sqlplus scott/tiger@sidorcl
+
+实验一：使用简便连接连接到db11服务器的orcl数据库，贴出连接命令
+实验二：使用本地命名连接到db11服务器的orcl数据库，贴出配置文件中的此配置项。
+实验三：在db11服务器创建非默认监听LISTENER1，监听1522端口，启动监听，查看监听状态，查看监听配置文件信息。
+实验四：在LISTENER1上，为ORCL实例注册ERPDB服务；使用ERPDB服务连接到ORCL实例；查看监听配置文件信息。
+	
+	
+tnsnames.ora模板
+==========================================================
+ORCL =
+  (DESCRIPTION =
+    (ADDRESS_LIST =
+      (ADDRESS = (PROTOCOL = TCP)(HOST = db11)(PORT = 1521))
+    )
+    (CONNECT_DATA =
+      (SERVER = DEDICATED)
+      (SERVICE_NAME = ORCL)
+    )
+  )
+
+ORCLCW =
+  (DESCRIPTION =
+    (ADDRESS_LIST =
+      (ADDRESS = (PROTOCOL = TCP)(HOST = 192.168.56.111)(PORT = 1522))
+    )
+    (CONNECT_DATA =
+      (SERVICE_NAME = ORCLSRV)
+    )
+  )   
+   
+SIDORCL =
+  (DESCRIPTION =
+    (ADDRESS_LIST =
+      (ADDRESS = (PROTOCOL = TCP)(HOST = 192.168.56.111)(PORT = 1522))
+    )
+    (CONNECT_DATA =
+      (SID = ORCL)
+    )
+  )  
+  
+# RAC 服务器端负载均衡
+RACDBSCAN  =
+  (DESCRIPTION =
+    (ADDRESS = (PROTOCOL = TCP)(HOST = scan-name)(PORT = 1521))    
+	(LOAD_BALANCE = yes)
+      (CONNECT_DATA =
+      (SERVER = DEDICATED)
+      (SERVICE_NAME = racdb)
+      (FAILOVER_MODE =
+        (TYPE = SELECT)
+        (METHOD = BASIC)
+        (RETRIES = 180)
+        (DELAY = 5)
+      )
+    )
+  )
+  
+# RAC 客户端负载均衡
+RACDB  =
+  (DESCRIPTION =
+    (ADDRESS = (PROTOCOL = TCP)(HOST = node1-vip)(PORT = 1521))
+    (ADDRESS = (PROTOCOL = TCP)(HOST = node2-vip)(PORT = 1521))
+	(LOAD_BALANCE = yes)
+      (CONNECT_DATA =
+      (SERVER = DEDICATED)
+      (SERVICE_NAME = racdb)
+      (FAILOVER_MODE =
+        (TYPE = SELECT)
+        (METHOD = BASIC)
+        (RETRIES = 180)
+        (DELAY = 5)
+      )
+    )
+  )
+
+# RAC 首选节点
+RACDB  =
+  (DESCRIPTION =
+    (ADDRESS = (PROTOCOL = TCP)(HOST = node1-vip)(PORT = 1521))
+    (ADDRESS = (PROTOCOL = TCP)(HOST = node2-vip)(PORT = 1521))
+      (CONNECT_DATA =
+      (SERVER = DEDICATED)
+      (SERVICE_NAME = racdb)
+      (FAILOVER_MODE =
+        (TYPE = SELECT)
+        (METHOD = BASIC)
+        (RETRIES = 180)
+        (DELAY = 5)
+      )
+    )
+  )
+
+==========================================================
+
+
+
+	
+	
+	
+	
+	
+	
+	
