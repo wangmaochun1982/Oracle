@@ -1,0 +1,188 @@
+Oracle 存储管理
+逻辑存储
+    段 -- 文件            （DB）
+物理存储
+	管理存储设备 -- 文件  （ASM）
+	
+select * from dba_data_files;
+select * from dba_tablespaces;
+select * from dba_segments;
+select * from dba_extents;
+
+select * from dba_tables where owner='HR';
+select * from dba_segments where owner='HR';
+select * from dba_extents where owner='HR';
+
+查看段（表/索引）的大小
+select BYTES from dba_segments where owner='HR' 
+  and segment_name='EMPLOYEES';
+select * from dba_extents where owner='HR' 
+  and segment_name='EMPLOYEES';
+
+以SYSTEM用户登录数据库
+
+sqlplus system/password
+
+==创建表空间==
+create tablespace testtbs 
+datafile '/u01/app/oracle/oradata/ORCL/testtbs01.dbf' size 10m
+autoextend on next 10m maxsize 100m
+extent management local autoallocate
+segment space management auto;
+
+size:  大小
+autoextend on ： 启用数据文件自动扩展
+    next 10m maxsize 100m ： 自动扩展的扩展量
+extent management DICTIONARY ：区管理：字典管理（不建议）
+extent management local ：区管理：本地管理（默认）
+	autoallocate ： 新分配的区大小自动调整（默认）
+	uniform size 10m ： 新分配的区大小固定为10m
+segment space management auto ：段空间管理：自动（默认）
+	auto -->  manual : 段空间管理：手动（不建议）
+
+在特定表空间创建表
+create table newtab(id number) tablespace testtbs;
+select * from dba_segments where segment_name='NEWTAB';
+select * from dba_extents where segment_name='NEWTAB';
+alter table newtab allocate extent;
+
+在 Oracle 11g 引入了延迟段创建的功能，在创建表的时候，不分配段，在本表中第一次插入数据的时候，分配段。
+为什么仍分配了呢？
+
+IOTs and other special tables like clustered tables, global temporary tables, session-specific temporary tables, internal tables, typed tables, AQ tables, external tablesare not supported. Tables owned by SYS,SYSTEM, PUBLIC, OUTLN, and XDB are also excluded.
+
+这里解释了原因，SYS的表是不能使用延迟段的，因此创建时还是立即分配段空间。
+
+
+
+==表空间维护==
+===调整数据文件大小===
+alter database datafile '/u01/app/oracle/oradata/ORCL/testtbs01.dbf' resize 5m;
+===调整数据文件，启用自动扩展===
+alter database datafile '/u01/app/oracle/oradata/ORCL/testtbs01.dbf' autoextend on next 10m maxsize 200m;
+===为表空间增加数据文件===
+alter tablespace testtbs 
+add datafile '/u01/app/oracle/oradata/ORCL/testtbs02.dbf' size 10m;
+
+select * from dba_data_files;
+
+==表空间使用率查询==
+自编语句
+select total.tablespace_name,total_bytes,free_bytes, total_bytes-free_bytes used_bytes,
+round((total_bytes-free_bytes)/total_bytes*100,2) used_rate from
+(select tablespace_name,sum(bytes) total_bytes from dba_data_files group by tablespace_name) total,
+(select tablespace_name,sum(bytes) free_bytes from dba_free_space group by tablespace_name) free
+where total.tablespace_name=free.tablespace_name;
+
+
+
+
+==删除表==
+drop table newtab;
+==删除表空间==
+drop tablespace testtbs including contents and datafiles;
+
+
+OMF功能的使用
+使Oracle自动管理路径与文件名
+SQL> host mkdir /u01/app/oracle/oradata/omf
+SQL> alter system set db_create_file_dest='/u01/app/oracle/oradata/omf';
+
+创建omf表空间
+SQL> create tablespace omftbs;
+
+确定OMF的文件特性
+select file_name,bytes/1024/1024,autoextensible,maxbytes/1024/1024,increment_by
+from dba_data_files;
+
+删除omf表空间和数据文件
+SQL>drop tablespace omftbs including contents and datafiles;
+  
+==表空间使用建议==
+1. 使用固定大小的表空间，预先分配一个季度到半年可能使用到的空间。
+   单个文件大小：16GB，32GB
+2. 再分配一到四个自动扩展的数据文件，初始大小比较小，如10M。用于偶发的数据文件使用率过高时的缓冲。
+3. 建议 表的表空间 和 索引表空间分开。方便管理。
+4. 每周查看表空间大小。或配置监控，表空间使用率超过80%时增加文件。
+5. 还可以将表空间的已用空间大小保存在表中，后期可以根据表的增长状况画图。
+
+
+==查看表空间使用率的脚本==
+
+===查看相对于自动扩展总大小的表空间使用率===
+# select * from DBA_TABLESPACE_USAGE_METRICS;
+显示结果较为异常
+
+===查看相对于当前已分配数据文件大小的表空间使用率===
+SELECT /* + RULE */  df.tablespace_name "Tablespace",
+       df.bytes / (1024 * 1024) "Size (MB)",
+       SUM(fs.bytes) / (1024 * 1024) "Free (MB)",
+       Nvl(Round(SUM(fs.bytes) * 100 / df.bytes),1) "% Free",
+       Round((df.bytes - SUM(fs.bytes)) * 100 / df.bytes) "% Used"
+  FROM dba_free_space fs,
+       (SELECT tablespace_name,SUM(bytes) bytes
+          FROM dba_data_files
+         GROUP BY tablespace_name) df
+ WHERE fs.tablespace_name (+)  = df.tablespace_name
+ GROUP BY df.tablespace_name,df.bytes
+UNION ALL
+SELECT /* + RULE */ df.tablespace_name tspace,
+       fs.bytes / (1024 * 1024),
+       SUM(df.bytes_free) / (1024 * 1024),
+       Nvl(Round((SUM(fs.bytes) - df.bytes_used) * 100 / fs.bytes), 1),
+       Round((SUM(fs.bytes) - df.bytes_free) * 100 / fs.bytes)
+  FROM dba_temp_files fs,
+       (SELECT tablespace_name,bytes_free,bytes_used
+          FROM v$temp_space_header
+         GROUP BY tablespace_name,bytes_free,bytes_used) df
+ WHERE fs.tablespace_name (+)  = df.tablespace_name
+ GROUP BY df.tablespace_name,fs.bytes,df.bytes_free,df.bytes_used
+ ORDER BY 4 DESC;
+
+===同时查看表空间自动扩展最大大小和已分配大小===
+set lines 132 
+set pages 105
+set pause off
+set echo off
+set feedb on
+
+column "TOTAL ALLOC (MB)"      format 9,999,990.00
+column "TOTAL PHYS ALLOC (MB)" format 9,999,990.00
+column "USED (MB)"             format 9,999,990.00
+column "FREE (MB)"             format 9,999,990.00
+column "% USED"                format 990.00
+
+select 
+   a.tablespace_name,
+   a.bytes_alloc/(1024*1024) "TOTAL ALLOC (MB)",
+   a.physical_bytes/(1024*1024) "TOTAL PHYS ALLOC (MB)",
+   nvl(b.tot_used,0)/(1024*1024) "USED (MB)",
+   round((nvl(b.tot_used,0)/a.bytes_alloc)*100,2) "% USED",
+   round((nvl(b.tot_used,0)/a.physical_bytes)*100,2) "% USED PHYSICAL"
+from 
+   (select 
+      tablespace_name,
+      sum(bytes) physical_bytes,
+      sum(decode(autoextensible,'NO',bytes,'YES',maxbytes)) bytes_alloc
+    from 
+      dba_data_files
+    group by 
+      tablespace_name ) a,
+   (select 
+      tablespace_name, 
+      sum(bytes) tot_used
+    from 
+      dba_segments
+    group by 
+      tablespace_name ) b
+where 
+   a.tablespace_name = b.tablespace_name (+)
+and 
+   a.tablespace_name not in 
+   (select distinct 
+       tablespace_name 
+    from 
+       dba_temp_files)
+order by 1;
+  
+  
