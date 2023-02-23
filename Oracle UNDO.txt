@@ -1,0 +1,67 @@
+Oracle Undo
+
+UNDO的使用场景
+	回退操作 
+	读取一致性查询 
+	闪回查询、闪回事务处理和闪回表 
+	从失败的事务处理中进行恢复 
+
+UNDO保留的是什么数据？
+	数据块的镜像？行的镜像？字段的镜像？
+	字段。
+	http://www.xifenfei.com/2858.html
+	http://www.dbabeta.com/2010/undo-management_undo-generation-stat.html
+	
+使用UNDO回滚操作是物理回滚还是逻辑回滚？
+	逻辑
+
+常见问题：
+	ORA-01555 快照过旧
+		问题解决：1. 增大undo，2. 减小查询持续时间。
+	
+UNDO的管理：
+1. 设置 undo_retention 
+	alter system set undo_retention = 3600 scope=both;
+2. 管理 undo 数据文件（增加数据文件、设置为自动扩展）
+
+UNDO管理之一：自动UNDO管理
+http://www.dbabeta.com/2010/undo-management_auto-undo-management.html
+UNDO管理之二：UNDO相关数据字典
+http://www.dbabeta.com/2010/undo-management_data-dictionary.html
+UNDO管理之三：UNDO产生的估算
+http://www.dbabeta.com/2010/undo-management_undo-generation-stat.html
+	
+	
+查看当前的回滚段
+SQL> select tablespace_name, segment_name, status from dba_rollback_segs;
+
+TABLESPACE_NAME                SEGMENT_NAME                   STATUS
+------------------------------ ------------------------------ ----------------
+SYSTEM                         SYSTEM                         ONLINE
+UNDOTBS1                       _SYSSMU10_1201781940$          ONLINE
+UNDOTBS1                       _SYSSMU9_2014181306$           ONLINE
+UNDOTBS1                       _SYSSMU8_144862965$            ONLINE
+UNDOTBS1                       _SYSSMU7_436504518$            ONLINE
+UNDOTBS1                       _SYSSMU6_3214712007$           ONLINE
+UNDOTBS1                       _SYSSMU5_3994777876$           ONLINE
+UNDOTBS1                       _SYSSMU4_161684038$            ONLINE
+UNDOTBS1                       _SYSSMU3_3735903920$           ONLINE
+UNDOTBS1                       _SYSSMU2_3661273392$           ONLINE
+UNDOTBS1                       _SYSSMU1_705523139$            ONLINE
+
+11 rows selected.
+
+闪回查询案例
+select sysdate from dual;
+select count(*) from scott.emp;
+delete from scott.emp; 
+where empno=1;
+commit;
+select count(*) from scott.emp;
+select * from scott.emp as of timestamp sysdate-5/24/60;
+select count(*) from scott.emp as of TIMESTAMP to_timestamp('2016-06-23 11:25:00', 'YYYY-MM-DD HH24:MI:SS');
+create table scott.empbak as select * from scott.emp as of timestamp sysdate-5/24/60;
+select * from scott.empbak;
+insert into scott.emp select * from scott.empbak;
+commit;
+select count(*) from scott.emp;
