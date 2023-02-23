@@ -1,0 +1,41 @@
+Oracle SQL Loader
+使用场景：从文本文件向Oracle导入数据
+
+1、创建操作系统目录
+[oracle@db11 ~]$ mkdir /u01/sqlldr
+
+2、创建 SQL Loader 控制文件
+[oracle@db11 ~]$ vim /u01/sqlldr/sqlldr.ctl
+内容如下：
+
+load data
+infile '/u01/sqlldr/mydata.txt'
+badfile '/u01/sqlldr/bad.txt'
+discardfile '/u01/sqlldr/discard.txt'
+append into table emp
+fields terminated by "," optionally enclosed by '"'
+(empno, empname , hire_date date 'dd/mm/yyyy')
+
+3、创建 SQL Loader 数据文件
+[oracle@db11 ~]$ vim /u01/sqlldr/mydata.txt
+内容如下：
+
+10001,"Scott,Tiger",21/07/2001
+10002,"Frank Naude",21/05/2002
+10003,"Peter Huang",21/06/2003
+10004,"Mike Chen",21/07/20033
+
+4、创建测试表EMP
+
+以SYSTEM 用户登录数据库
+[oracle@db11 ~]$ sqlplus system/password
+SQL> create table emp(empno varchar2(30),empname varchar2(30),hire_date date);
+SQL> select * from emp;
+
+5、用sqlloader程序装载数据
+
+[oracle@db11 sqlldr]$ sqlldr system/password control=/u01/sqlldr/sqlldr.ctl
+
+6、查询导入的数据
+[oracle@db11 sqlldr]$ sqlplus system/password
+SQL> select * from emp;
