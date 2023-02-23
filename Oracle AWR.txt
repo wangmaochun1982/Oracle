@@ -1,0 +1,76 @@
+Oracle AWR
+[oracle@db11 ~]$ pwd
+/home/oracle
+[oracle@db11 ~]$ sqlplus / as sysdba
+SQL> @?/rdbms/admin/awrrpt
+     @：运行一个脚本；?：表示ORACLE_HOME，
+	 /rdbms/admin：子目录，awrrpt：awrrpt.sql文件
+Enter value for report_type: 【回车】
+Enter value for num_days: 【输入想查看最近几天的快照回车，或直接回车查看所有的快照】
+                                                        Snap
+Instance     DB Name        Snap Id    Snap Started    Level
+------------ ------------ --------- ------------------ -----
+ORCL         ORCL                16 04 Jul 2015 16:00      1
+                                 17 04 Jul 2015 17:00      1
+
+                                 18 05 Jul 2015 09:26      1
+                                 19 05 Jul 2015 10:00      1
+Enter value for begin_snap: 【输入起始snap ip，如上面的16】
+Enter value for end_snap:   【输入结束snap ip，如上面的17】
+    *起始和结束snap ip中间不能有空行（空行表示重启过）
+	
+The default report file name is awrrpt_1_16_17.html.
+Enter value for report_name: 【输入报告名回车，或直接回车使用默认报告名】
+
+报告生成
+
+生成在登陆sqlplus时所在的目录。
+
+将报告从Linux下载到Windows下查看。
+SecureCRT -- 右键点击连接标签 -- Connect Sftp Session
+sftp> pwd
+/root
+sftp> lpwd
+C:/TEMP
+sftp> cd /home/oracle/
+sftp> get awrrpt_1_18_19.html
+
+日志被下载到lpwd的路径下。
+
+Load Profile
+Per Second
+DB Time、DB CPU、Physical Read、Physical Write、Redo Size
+
+Instance Efficiency Percentages (Target 100%)
+Buffer Nowait %:
+Buffer Hit %:
+Soft Parse %:
+
+Top 5 Timed Foreground Events
+定位性能问题方向
+
+IO
+	IO Stats
+	Advisory Statistics
+	Segments by Physical Reads
+	Segments by Direct Physical Reads
+	SQL ordered by Reads
+缓存过低
+	Advisory Statistics
+SQL
+	SQL Statistics
+集群
+	RAC Statistics
+锁
+	enq: TX - row lock contention
+	http://mikixiyou.iteye.com/blog/1771648
+	Segments by Row Lock Waits
+	在v$session和v$session_wait中，event列是enq: TX - row lock contention的
+	select blocking_session,sql_id from v$session where blocking_session is not null;
+解析
+	Hard Parse
+登陆
+	Logons
+
+
+
