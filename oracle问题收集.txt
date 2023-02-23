@@ -1,0 +1,635 @@
+-- 查询数据库的物理表空间信息
+select * from dba_data_files;
+--查询表的空闲信息可以用:
+select * from dba_free_space;
+--查询用户的数据段信息:查询具体表空间,索引,对象占用空间信息;
+select * from user_extents;
+--查询用户表空间的表
+select * from user_tables;
+-- 查看当前用户的缺省表空间
+select username,default_tablespace from user_users;
+-- 查看所有dba权限帐号
+select * from dba_users;
+-- 所有用户
+select * from all_users;
+-- 当前用户
+select * from user_users; 
+-- 创建表空间
+create tablespace creditwx datafile 'E:\oracdata\creditwx01.dbf' size 5g autoextend on next 100m maxsize 10g;
+-- 自动扩展添加表空间
+alter tablespace creditwx add datafile 'E:\oracdata\creditwx02.dbf' size 5g AUTOEXTEND ON NEXT 100m MAXSIZE 10g;
+alter tablespace creditwx add datafile 'E:\oracdata\creditwx03.dbf' size 5g AUTOEXTEND ON NEXT 100m MAXSIZE 10g;
+alter tablespace creditwx add datafile 'E:\oracdata\creditwx04.dbf' size 5g AUTOEXTEND ON NEXT 100m MAXSIZE 10g;
+alter tablespace creditwx add datafile 'E:\oracdata\creditwx05.dbf' size 5g AUTOEXTEND ON NEXT 100m MAXSIZE 10g;
+alter tablespace creditwx add datafile 'E:\oracdata\creditwx06.dbf' size 5g AUTOEXTEND ON NEXT 100m MAXSIZE 10g;
+alter tablespace creditwx add datafile 'E:\oracdata\creditwx07.dbf' size 5g AUTOEXTEND ON NEXT 100m MAXSIZE 10g;
+alter tablespace creditwx add datafile 'E:\oracdata\creditwx08.dbf' size 5g AUTOEXTEND ON NEXT 100m MAXSIZE 10g;
+alter tablespace creditwx add datafile 'E:\oracdata\creditwx09.dbf' size 5g AUTOEXTEND ON NEXT 100m MAXSIZE 10g;
+alter tablespace creditwx add datafile 'E:\oracdata\creditwx10.dbf' size 5g AUTOEXTEND ON NEXT 100m MAXSIZE 10g;
+-- 2021930
+alter tablespace creditwx add datafile 'E:\oracdata\creditwx11.dbf' size 5g AUTOEXTEND ON NEXT 100m MAXSIZE 10g;
+-- 创建用户指定表空间
+create user credit_tencent identified by D#H5TklK#se1 default tablespace creditwx;
+-- 查看当前是在哪儿个库
+-- SQL>show parameter instance;
+SQL>show parameter instance_name;
+-- SQL>select * from v$instance;
+-- 授权用户访问数据库
+SQL>set oracle_sid=creditwx
+SQL>grant connect,resource,dba to credit_tencent;
+-- 查询有dba权限的用户
+select * from dba_role_privs where granted_role='DBA';
+-- 收回dba权限
+Revoke dba from credit_tencent;
+-- GRANT CONNECT,RESOURCE TO 用户名;
+-- 普通用户是不需要使用dba权限，但是在收回dba权限时候需要对帐号从新进行resource权限赋予，否则回导致帐号无法访问表空间
+
+-- 新建立运维帐号并赋予DBA权限
+-- create user credit_ops identified by D#H5TklK#se1 default tablespace creditwx;
+-- grant connect,resource,dba to credit_ops;
+
+
+-- 修改用户密码
+alter user credit_tencent identified by mima;
+-- 查看用户和默认表空间的关系
+select username,default_tablespace from dba_users; 
+-- 查看当前用户的表
+select table_name from user_tables;
+-- 备份新库命令
+expdp credit_tencent/D#H5TklK#se1@localhost:1521/credit  schemas=credit_tencent dumpfile=20181207-expdp.dmp directory=dump_dir job_name=my_job
+
+-- 导入数据库
+impdp credit_tencent/D#H5TklK#se1@localhost:1521/creditwx directory=dump_dir  REMAP_TABLESPACE=CREDIT_DATA:CREDITWX,TENCENT_DATA:CREDITWX dumpfile=credit_tencent_%date:~0,4%%date:~5,2%%date:~8,2%.dmp schemas=credit_tencent REMAP_SCHEMA=credit_tencent:credit_tencent ）
+--(指定schemas用户，指定remap_schema=备份库:导入库，remap_tablespace=原表空间:导入表空间，原表空间:导入表空间)
+
+-- 数据库允许最大连接数 
+select value from v$parameter where name ='processes';
+--修改最大连接数
+alter system set processes = 2000 scope = spfile;
+-- 修改最大连接数需要重启数据库
+shutdown immediate;
+startup;
+
+--查询oracle的连接数
+select count(*) from v$session;
+--查询oracle的并发连接数
+select count(*) from v$session where status='ACTIVE';
+--查看不同用户的连接数
+select username,count(username) from v$session where username is not null group by username;
+
+
+-- windows切换实例/linux切换实例
+set oracle_sid=credit  /export ORACLE_SID=credit
+
+-- 查看当前连接实例
+select name from v$database;
+-- 或
+select instance_name from v$instance;
+-- 或
+show parameter instance_name
+-- 当前的session连接数
+select count(*) from v$session;
+-- 当前并发连接数
+select count(*) from v$session where status='ACTIVE';
+-- 查询当前库的dba帐号有哪儿些
+SELECT username,PROFILE FROM dba_users; 
+-- 帐号密码过期时间
+SELECT * FROM dba_profiles s WHERE s.profile='DEFAULT' AND resource_name='PASSWORD_LIFE_TIME';
+-- 将密码有效期由默认的180天修改成“无限制”
+ALTER PROFILE DEFAULT LIMIT PASSWORD_LIFE_TIME UNLIMITED;
+-- 查询用户属于哪儿个表空间
+select   tablespace_name,table_name  from user_tables where table_name='credit_tencent';
+-- 删除用户并删除表空间及视图
+drop user credit_tencent; cascade;
+-- 如果没有删除用户的权限,将会输出一批删除表的sql语句，这些SQL语句执行一下就可以了。(需要有drop table的权限)
+select 'drop table '||table_name||';' from cat where table_type='TABLE'
+-- 查看当前连接数
+show parameter processes
+-- 修改sessions连接数
+alter system set processes=300 scope=spfile;
+-- 查看sessions数
+show parameter sessions
+-- 修改sessions连接数
+alter system set sessions=335 scope=spfile;
+
+-- 终止备份命令 crtl+c
+Export>stop_job=immediate
+-- 是否确实要停止此作业 ([Y]/N): YES
+-- 查询备份工作命令是否执行
+select job_name,state from dba_datapump_jobs;
+-- 查看表空间行数
+select t.table_name,t.num_rows from user_tables t ORDER BY NUM_ROWS DESC;
+-- 查询账号
+select * from sys.dba_users
+-- 查询dump_dir
+select * from dba_directories;
+-- 创建及更改dumpfile文件路径
+-- create or replace directory dump_dir as 'e:\dump\';
+-- 赋权
+grant read,write on directory dump_dir to credit_tencent
+-- 删除
+drop directory dump_dir
+-- 查询表空间占用率 
+SELECT t.segment_name AS TABLENAME,t.segment_type,BYTES B,BYTES / 1024 KB,BYTES / 1024 / 1024 MB  FROM user_segments t where t.segment_type='TABLE';
+-- 查看当前链接数据库的ip地址
+select 
+ a.userid,
+ a.userhost,
+ a.terminal,
+ a.action#,aa.name,dbms_lob.substr(a.sqltext) as sqltext,
+ dbms_lob.substr(a.sqlbind)as sqlbind,
+ a.obj$creator,a.obj$name,
+ a.ntimestamp#
+ from sys.aud$ a,
+ sys.audit_actions aa
+ where
+ a.action# = aa.action
+ and a.ntimestamp# >to_date('20181130','yyyymmdd')
+ order by  a.ntimestamp# desc
+-- 查看表行数
+select t.table_name,t.num_rows from user_tables t ORDER BY NUM_ROWS DESC;
+-- 审计表再哪儿个表空间
+SELECT T.TABLE_NAME, T.TABLESPACE_NAME FROM DBA_TABLES T where table_name='AUD$'；
+-- 查询审计表空间
+SELECT * FROM (SELECT BYTES, segment_name, segment_type, owner FROM dba_segments WHERE tablespace_name = 'SYSTEM' ORDER BY BYTES DESC) WHERE ROWNUM < 10;
+-- 查询表空间大小
+Select Segment_Name,Sum(bytes)/1024/1024 From User_Extents Group By Segment_Name
+-- 查询临时表空间
+SELECT TABLESPACE_NAME, FILE_ID, FILE_NAME, BYTES/1024/1024 AS "SPACE(M)" FROM DBA_TEMP_FILES
+-- 扩充零食表空间，但不自增
+alter tablespace TEMP add TEMPFILE '/home/oracle/oracle/oradata/credit/temp02.dbf' size 30M
+--查ns空间使用率情况（含临时表空间）http://blog.itpub.net/29578568/viewspace-2141980/
+SELECT d.tablespace_name "Name", d.status "Status", 
+       TO_CHAR (NVL (a.BYTES / 1024 / 1024, 0), '99,999,990.90') "Size (M)",
+          TO_CHAR (NVL (a.BYTES - NVL (f.BYTES, 0), 0) / 1024 / 1024,
+                   '99999999.99'
+                  ) USE,
+       TO_CHAR (NVL ((a.BYTES - NVL (f.BYTES, 0)) / a.BYTES * 100, 0),
+                '990.00'
+               ) "Used %"
+  FROM SYS.dba_tablespaces d,
+       (SELECT   tablespace_name, SUM (BYTES) BYTES
+            FROM dba_data_files
+        GROUP BY tablespace_name) a,
+       (SELECT   tablespace_name, SUM (BYTES) BYTES
+            FROM dba_free_space
+        GROUP BY tablespace_name) f
+ WHERE d.tablespace_name = a.tablespace_name(+)
+   AND d.tablespace_name = f.tablespace_name(+)
+   AND NOT (d.extent_management LIKE 'LOCAL' AND d.CONTENTS LIKE 'TEMPORARY')
+UNION ALL
+SELECT d.tablespace_name "Name", d.status "Status", 
+       TO_CHAR (NVL (a.BYTES / 1024 / 1024, 0), '99,999,990.90') "Size (M)",
+          TO_CHAR (NVL (t.BYTES, 0) / 1024 / 1024, '99999999.99') USE,
+       TO_CHAR (NVL (t.BYTES / a.BYTES * 100, 0), '990.00') "Used %"
+  FROM SYS.dba_tablespaces d,
+       (SELECT   tablespace_name, SUM (BYTES) BYTES
+            FROM dba_temp_files
+        GROUP BY tablespace_name) a,
+       (SELECT   tablespace_name, SUM (bytes_cached) BYTES
+            FROM v$temp_extent_pool
+        GROUP BY tablespace_name) t
+ WHERE d.tablespace_name = a.tablespace_name(+)
+   AND d.tablespace_name = t.tablespace_name(+)
+   AND d.extent_management LIKE 'LOCAL'
+   AND d.CONTENTS LIKE 'TEMPORARY';
+-- SELECT UPPER(F.TABLESPACE_NAME) "表空间名",
+       -- D.TOT_GROOTTE_MB "表空间大小(M)",
+       -- D.TOT_GROOTTE_MB - F.TOTAL_BYTES "已使用空间(M)",
+       -- TO_CHAR(ROUND((D.TOT_GROOTTE_MB - F.TOTAL_BYTES) / D.TOT_GROOTTE_MB * 100,
+                     -- 2),
+               -- '990.99') || '%' "使用比",
+       -- F.TOTAL_BYTES "空闲空间(M)",
+       -- F.MAX_BYTES "最大块(M)"
+  -- FROM (SELECT TABLESPACE_NAME,
+               -- ROUND(SUM(BYTES) / (1024 * 1024), 2) TOTAL_BYTES,
+               -- ROUND(MAX(BYTES) / (1024 * 1024), 2) MAX_BYTES
+          -- FROM SYS.DBA_FREE_SPACE
+         -- GROUP BY TABLESPACE_NAME) F,
+       -- (SELECT DD.TABLESPACE_NAME,
+               -- ROUND(SUM(DD.BYTES) / (1024 * 1024), 2) TOT_GROOTTE_MB
+          -- FROM SYS.DBA_DATA_FILES DD
+         -- GROUP BY DD.TABLESPACE_NAME) D
+ -- WHERE D.TABLESPACE_NAME = F.TABLESPACE_NAME
+ -- ORDER BY 1;
+--查看表空间是否自动扩展
+select tablespace_name,file_name,autoextensible from dba_data_files where tablespace_name = 'TENCENT_DATA';
+--数据库表空间增加10G
+alter tablespace TENCENT_DATA add datafile 
+'D:\APP\ADMINISTRATOR\ORADATA\CREDIT\TENCENT_DATA02.DBF' size 5120M
+AUTOEXTEND ON NEXT 1310720 MAXSIZE 10240M;
+-- 归档是否开启
+archive log list;
+-- 启动归档
+alter database archivelog;
+-- 查询当前用户表大小
+select segment_name,ROUND(sum(bytes) / (1024 * 1024 * 1024),2) as "size(G)"
+from user_segments
+group by segment_name
+order by sum(bytes) desc;
+
+-- 查询临时表空间
+SELECT temp_used.tablespace_name,total-used as "Free", total as "Total",round(nvl(total - used, 0) * 100 / total, 3) "Free percent"
+  FROM (SELECT tablespace_name, SUM(bytes_used)/1024/1024 used FROM V$TEMP_SPACE_HEADER GROUP BY tablespace_name) temp_used,
+       (SELECT tablespace_name, SUM(bytes)/1024/1024 total FROM dba_temp_files GROUP BY tablespace_name) temp_total
+WHERE temp_used.tablespace_name = temp_total.tablespace_name
+
+/* oracle查询慢语句 */
+select *
+ from (select sa.SQL_TEXT,
+        sa.SQL_FULLTEXT,
+        sa.EXECUTIONS "执行次数",
+        round(sa.ELAPSED_TIME / 1000000, 2) "总执行时间",
+        round(sa.ELAPSED_TIME / 1000000 / sa.EXECUTIONS, 2) "平均执行时间",
+        sa.COMMAND_TYPE,
+        sa.PARSING_USER_ID "用户ID",
+        u.username "用户名",
+        sa.HASH_VALUE
+     from v$sqlarea sa
+     left join all_users u
+      on sa.PARSING_USER_ID = u.user_id
+     where sa.EXECUTIONS > 0
+     order by (sa.ELAPSED_TIME / sa.EXECUTIONS) desc)
+ where rownum <= 50;
+-- 查询次数最多的 sql
+select *
+ from (select s.SQL_TEXT,
+        s.EXECUTIONS "执行次数",
+        s.PARSING_USER_ID "用户名",
+        rank() over(order by EXECUTIONS desc) EXEC_RANK
+     from v$sql s
+     left join all_users u
+      on u.USER_ID = s.PARSING_USER_ID) t
+ where exec_rank <= 100;
+
+-- 数据备份
+create table SYS_DEPT_0313 as select * from  SYS_DEPT
+-- lsnrctl log重命名
+lsnrctl set log_status off
+cd >D:\app\Administrator\diag\tnslsnr\cr-oracle\listener\trace\listener.log
+lsnrctl set log_status on
+
+-- 查询数据时间范围
+select to_char('2005-12-25,13:25:59','yyyy-mm-dd,hh24:mi:ss')>'2019-07-27 00:00:00' and  to_char('2005-12-25,13:25:59','yyyy-mm-dd,hh24:mi:ss')<='2005-12-25 13:25:59' //显示：2005-12-25 13:25:59
+to_char(t.create_time,'yyyy-mm-dd hh24:mi:ss')>'2019-07-01 00:00:00' and  to_char(t.create_time,'yyyy-mm-dd hh24:mi:ss')<='2019-08-15 23:59:59'
+
+-- 时间戳
+to_char(to_date('1970-01-01 08:00:00', 'yyyy-mm-dd hh24:mi:ss') + t.dispatch_time / 24 / 60 / 60,'yyyy-mm-dd hh24:mi:ss') 
+-- 单字段去重并显示其他字段
+with temp as (
+     select error_code,error_message from INTERFACE_LOG_ERROR
+)
+select error_code,error_message from (
+       select error_code,dbms_lob.substr(error_message) as error_message,row_number() over (partition by error_code order by rownum) row_no from temp
+) where row_no = 1
+-- clob字段显示
+select dbms_lob.substr(value) from tables  
+
+-- 更新表类型为timestamp的数据
+update CR_FINISH set FINISH_TIME=to_timestamp(nvl('2020-07-24 10:18:08','1900-01-01 00:00:00'),'yyyy-mm-dd hh24:mi:ss')   where  id='8a0d0d607350b6db01737e9d089145cd' and audit_id='AwAAAJjdONEBAAAAAS4ZXw'
+
+-- 修改归档日志大小，原大小为3GB，更改为4GB
+SQL>show parameter db_recovery_file_dest_size;
+SQL>alter system set db_recovery_file_dest_size=4G;
+
+-- temp表空间满了
+-- 查询表空间位置
+select tablespace_name,file_name,bytes/1024/1024 file_size,autoextensible from dba_temp_files;
+SQL>select status,enabled, name, bytes/1024/1024 file_size from v$tempfile;
+-- 增加temp空间
+SQL>alter database tempfile 'D:\APP\ADMINISTRATOR\ORADATA\CREDITWX\TEMP01.DBF' resize 1GB;
+
+
+-- system表空间满了
+-- 查询system表空间存放位置
+SELECT T.TABLESPACE_NAME,D.FILE_NAME,D.AUTOEXTENSIBLE,D.BYTES,D.MAXBYTES,D.STATUS FROM DBA_TABLESPACES T,DBA_DATA_FILES D WHERE T.TABLESPACE_NAME =D.TABLESPACE_NAME ORDER BY TABLESPACE_NAME,FILE_NAME; 
+-- 修改system表空间大小
+-- 表空间不足在原文件增加文件尺寸大小 原值820MB
+SQL>alter database datafile 'D:\APP\ADMINISTRATOR\ORADATA\CREDITWX\SYSTEM01.DBF' resize 2G; 
+
+
+-- 将INFOBIRD_RECORD表缓存到内存中
+alter table INFOBIRD_RECORD cache;
+alter table CR_ORDER cache;
+
+-- 设置buffer_pool空间，默认空间是0，建议根据表空间大小来设置db_keep_cache_size值
+-- alter system set db_keep_cache_size=50M scope=both sid=‘*';
+-- alter table INFOBIRD_RECORD storage(buffer_pool keep);
+/* 取消 */
+alter table INFOBIRD_RECORD nocache;
+alter table CR_ORDER nocache;	
+-- alter table INFOBIRD_RECORD storage(buffer_pool default);
+select table_name,OWNER,cache,buffer_pool from dba_tables where table_name='INFOBIRD_RECORD';  --查看是否缓存
+select * from dba_segments where segment_name='INFOBIRD_RECORD' ;          --查看表大小
+
+-- 查看oracle碎片
+SELECT table_name,ROUND ( (blocks * 8), 2) "高水位空间 k",ROUND ( (num_rows * avg_row_len / 1024), 2) "真实使用空间 k",ROUND ( (blocks * 10 / 100) * 8, 2) "预留空间(pctfree) k",ROUND ((  blocks * 8 - (num_rows * avg_row_len / 1024) - blocks * 8 * 10 / 100),2) "浪费空间 k" FROM user_tables WHERE temporary = 'N'
+ORDER BY 5 DESC;
+--
+SELECT OWNER,
+       TABLE_NAME,
+       SEGMENT_TYPE,
+       segment_space_management MANAGEMENT,
+       TABLE_MB USED_MB,
+       ROUND(WASTE_PER * TABLE_MB / 100, 2) FRAG_MB,
+       WASTE_PER fragment_per,
+       LAST_ANALYZED
+  FROM (SELECT OWNER,
+               SEGMENT_NAME TABLE_NAME,
+               LAST_ANALYZED,
+               SEGMENT_TYPE,
+               GREATEST(ROUND(100 * (NVL(HWM - AVG_USED_BLOCKS, 0) / GREATEST(NVL(HWM, 1), 1)), 2), 0) WASTE_PER,
+               ROUND(BYTES / POWER(1024, 2), 2) TABLE_MB,
+               NUM_ROWS,
+               BLOCKS,
+               EMPTY_BLOCKS,
+               HWM HIGHWATER_MARK,
+               AVG_USED_BLOCKS,
+               CHAIN_PER,
+               EXTENTS,
+               MAX_EXTENTS,
+               ALLO_EXTENT_PER,
+               DECODE(GREATEST(MAX_FREE_SPACE - NEXT_EXTENT, 0), 0, 'N', 'Y') CAN_EXTEND_SPACE,
+               NEXT_EXTENT,
+               MAX_FREE_SPACE,
+               O_TABLESPACE_NAME TABLESPACE_NAME,
+               block_size,
+               segment_space_management
+          FROM (SELECT A.OWNER OWNER,
+                       A.SEGMENT_NAME,
+                       A.SEGMENT_TYPE,
+                       A.BYTES,
+                       B.NUM_ROWS,
+                       A.BLOCKS BLOCKS,
+                       B.EMPTY_BLOCKS EMPTY_BLOCKS,
+                       A.BLOCKS - B.EMPTY_BLOCKS - 1 HWM,
+                       DECODE(ROUND((B.AVG_ROW_LEN * NUM_ROWS * (1 + (PCT_FREE / 100))) / dt.block_size, 0), 0, 1,
+                              ROUND((B.AVG_ROW_LEN * NUM_ROWS * (1 + (PCT_FREE / 100))) / dt.block_size, 0)) + 2 AVG_USED_BLOCKS,
+                              ROUND(100 * (NVL(B.CHAIN_CNT, 0) / GREATEST(NVL(B.NUM_ROWS, 1), 1)),
+                             2) CHAIN_PER,
+                       ROUND(100 * (A.EXTENTS / A.MAX_EXTENTS), 2) ALLO_EXTENT_PER,
+                       A.EXTENTS EXTENTS,
+                       A.MAX_EXTENTS MAX_EXTENTS,
+                       B.NEXT_EXTENT NEXT_EXTENT,
+                       B.TABLESPACE_NAME O_TABLESPACE_NAME,
+                       B.LAST_ANALYZED,
+                       dt.block_size,
+                       DT.segment_space_management
+                  FROM SYS.DBA_SEGMENTS A,
+                       SYS.DBA_TABLES   B,
+                       dba_tablespaces  dt
+                 WHERE A.OWNER = B.OWNER
+                   and SEGMENT_NAME = TABLE_NAME
+                   and SEGMENT_TYPE = 'TABLE'
+                 --  and dt.segment_space_management = 'AUTO'
+                 --  and B.table_name='LS_REPORT_VALUE_COLLECT'
+                   and dt.tablespace_name = a.tablespace_name
+                   --and b.last_analyzed > to_date('20070601', 'yyyymmdd')
+                union all
+                SELECT A.OWNER OWNER,
+                       SEGMENT_NAME || '.' || B.PARTITION_NAME,
+                       SEGMENT_TYPE,
+                       BYTES,
+                       B.NUM_ROWS,
+                       A.BLOCKS BLOCKS,
+                       B.EMPTY_BLOCKS EMPTY_BLOCKS,
+                       A.BLOCKS - B.EMPTY_BLOCKS - 1 HWM,
+                       DECODE(ROUND((B.AVG_ROW_LEN * B.NUM_ROWS * (1 + (B.PCT_FREE / 100))) / dt.block_size, 0), 0, 1,
+                              ROUND((B.AVG_ROW_LEN * B.NUM_ROWS * (1 + (B.PCT_FREE / 100))) / dt.block_size, 0)) + 2 AVG_USED_BLOCKS,
+                              ROUND(100 * (NVL(B.CHAIN_CNT, 0) / GREATEST(NVL(B.NUM_ROWS, 1), 1)), 2) CHAIN_PER,
+                       ROUND(100 * (A.EXTENTS / A.MAX_EXTENTS), 2) ALLO_EXTENT_PER,
+                       A.EXTENTS EXTENTS,
+                       A.MAX_EXTENTS MAX_EXTENTS,
+                       B.NEXT_EXTENT,
+                       B.TABLESPACE_NAME O_TABLESPACE_NAME,
+                       d.last_analyzed,
+                       dt.block_size,
+                       DT.segment_space_management
+                  FROM SYS.DBA_SEGMENTS       A,
+                       SYS.DBA_TAB_PARTITIONS B,
+                       SYS.DBA_TABLES         D,
+                       dba_tablespaces        dt
+                 WHERE A.OWNER = B.TABLE_OWNER
+                   and SEGMENT_NAME = B.TABLE_NAME
+                   and SEGMENT_TYPE = 'TABLE PARTITION'
+                  -- and dt.segment_space_management = 'AUTO'
+                  -- and B.table_name='LS_REPORT_VALUE_COLLECT'
+                   and dt.tablespace_name = a.tablespace_name
+                   AND D.OWNER = B.TABLE_OWNER
+                   AND D.TABLE_NAME = B.TABLE_NAME
+                   AND A.PARTITION_NAME = B.PARTITION_NAME
+                   --AND D.last_analyzed > to_date('20070601', 'yyyymmdd')
+                   ),
+               (SELECT TABLESPACE_NAME F_TABLESPACE_NAME,
+                       MAX(BYTES) MAX_FREE_SPACE
+                  FROM SYS.DBA_FREE_SPACE
+                 GROUP BY TABLESPACE_NAME)
+         WHERE F_TABLESPACE_NAME = O_TABLESPACE_NAME
+           AND GREATEST(ROUND(100 * (NVL(HWM - AVG_USED_BLOCKS, 0) /GREATEST(NVL(HWM, 1), 1)),2), 0) > 25
+           AND OWNER not in ('SYS', 'SYSMAN')
+           AND BLOCKS > POWER(1024, 2) / block_size)
+ where ROUND(WASTE_PER * TABLE_MB / 100, 2) > 100
+ ORDER BY 7 DESC;
+--
+-- USED_MB：表示对象已使用大小
+-- FRAG_MB：表示碎片所占大小
+-- FRAGMENT_PER：表示碎片率百分比
+
+
+-- 收集该表所有信息（包括索引）https://blog.csdn.net/shiyu1157758655/article/details/78051637
+SQL>exec dbms_stats.gather_table_stats(ownname =>credit_tencent ,tabname=>'INFOBIRD_RECORD' ,estimate_percent => 20,degree => 10,granularity => 'ALL',cascade => TRUE);
+-- 分析该表所有信息（包括索引
+SQL>analyze table INTERFACE_GROUP_LIST compute statistics;		-- 2020-8-6 10:23   --2020-8-7 16:48 --2020-08-12 9:26
+analyze table INTERFACE_GROUP_LIST delete statistics;	
+
+-- 查看 KEEP_buffer_cache大小
+select component,current_size from v$sga_dynamic_components where component='KEEP buffer cache';
+
+ 
+-- 分析表过期
+select owner,table_name,object_type,stale_stats,last_analyzed from dba_tab_statistics where table_name='INTERFACE_GROUP_LIST'
+
+-- 查询dba_job执行时间
+select * from dba_jobs d where d.LOG_USER='CREDIT_TENCENT';
+
+-- # 存储过程
+CREATE OR REPLACE PROCEDURE BEITONG_IGL AS
+BEGIN
+      EXECUTE IMMEDIATE 'ANALYZE TABLE INTERFACE_GROUP_LIST COMPUTE STATISTICS';  -- (EXECUTE IMMEDIATE'exec dbms_stats.gather_table_stats(credit_tencent,'INTERFACE_GROUP_LIST')';)
+	  COMMIT;
+END;
+-- # job  
+-- TRUNC(SYSDATE + 1) + (12*60+45)/(24*60) 第二天的12点45分00秒 执行
+-- TRUNC(SYSDATE) + 1 + 8 / (24)' 第二天的8点00分00秒 执行
+-- https://www.cnblogs.com/wangfg/p/5110831.html
+-- https://blog.csdn.net/qq_35893120/article/details/83893970
+
+-- 查询job_id
+select * from dba_jobs where log_user='CREDIT_TENCENT' 
+
+DECLARE 
+	JOB_IGL NUMBER; 
+	BEGIN 
+		DBMS_JOB.SUBMIT(
+		JOB => JOB_IGL, /*自动生成JOB_ID*/  
+		WHAT => 'BEITONG_IGL;',  /*需要执行的存储过程名称或SQL语句*/
+		INTERVAL => 'TRUNC(SYSDATE) + 1 + 8 / (24)'); /*每天早上8点执行*/
+		COMMIT;
+	END;
+-- 停止job
+declare
+	begin   
+		dbms_job.broken(4,true,sysdate);        /*停止一个job,jobId, job的ID,里面参数true也可是false，next_date（某一时刻停止）也可是sysdate（立刻停止）*/
+	commit;
+end;
+
+-- 启动指定定时任务
+declare
+	begin
+		DBMS_JOB.RUN(4); /*24 job的id*/
+	commit;
+end;
+
+-- # oracle查看15分钟之前插入的数据
+select * from AB_ASS_ASSIGN as of timestamp sysdate-15/1440
+-- 查询表update信息，只能查询24小时以内的
+select * from cr_order as of timestamp to_timestamp('2020-12-12 10:25:00','yyyy-mm-dd hh24:mi:ss');  
+-- 查询表的select记录信息
+SELECT *
+  FROM v$sql
+ where parsing_schema_name = 'CREDIT_TENCENT'
+   and sql_text like '%cr_order%' 
+  and substr(first_load_time, 0, 10)='2020-12-17' 
+-- 闪回记录查询
+select
+       versionS_starttime,
+       versionS_endtime,
+       versionS_xid,
+       versionS_operation,
+       credit_tencent.cr_order.*
+  from credit_tencent.cr_order versions between scn minvalue and maxvalue
+ where order_no = 'E202012162386'
+
+-- Oracle Supplemental logging
+-- https://blog.csdn.net/tswisdom/article/details/7434620
+-- 查看是否开启Supplemental logging
+select supplemental_log_data_min,supplemental_log_data_pk,supplemental_log_data_ui,supplemental_log_data_fk,supplemental_log_data_all from v$database;
+-- 开启supplemental logging 
+alter database add supplemental log data;
+-- 关闭supplemental logging
+alter database drop supplemental log data;
+
+-- oracle audit
+-- 查看是否开启
+SQL> show parameter audit;
+NAME                                 TYPE        VALUE
+------------------------------------ ----------- ------------------------------
+audit_file_dest                      string      D:\APP\ADMINISTRATOR\ADMIN\CREDITWX\ADUMP
+audit_sys_operations                 boolean     FALSE
+audit_trail                          string      DB
+
+-- audit_sys_operations：
+-- 默认为false，当设置为true时，所有sys用户（包括以sysdba,sysoper身份登录的用户）的操作都会被记录，audit trail不会写在aud$表中，这个很好理解，如果数据库还未启动aud$不可用，那么像conn /as sysdba这样的连接信息，只能记录在其它地方。如果是windows平台，audti trail会记录在windows的事件管理中，如果是linux/unix平台则会记录在audit_file_dest参数指定的文件中。
+
+-- audit_trail：
+-- None：是默认值，不做审计；
+-- DB：将audit trail 记录在数据库的审计相关表中，如aud$，审计的结果只有连接信息；
+-- DB,Extended：这样审计结果里面除了连接信息还包含了当时执行的具体语句；
+-- OS：将audit trail 记录在操作系统文件中，文件名由audit_file_dest参数指定；
+-- XML：10g里新增的。
+
+
+-- oracle 死锁
+-- http://www.zuidaima.com/share/1607194957646848.htm
+
+-- 查询每个DBF占用大小
+select
+ 　　b.file_name 物理文件名,
+ 　　b.tablespace_name 表空间,
+ 　　b.bytes / 1024 / 1024 大小M,
+ 　　(b.bytes - sum(nvl(a.bytes, 0))) / 1024 / 1024 已使用M,
+ 　　substr((b.bytes - sum(nvl(a.bytes, 0))) / (b.bytes) * 100, 1, 5) 利用率
+ 　　from dba_free_space a,
+ dba_data_files b
+ 　　where a.file_id = b.file_id
+ 　　group by b.tablespace_name,
+ b.file_name,
+ b.bytes
+ 　　order by b.tablespace_name
+
+-- 查询数据库锁表
+select t2.username,
+       t2.sid,
+       t2.serial#,
+       t3.object_name,
+       t2.OSUSER,
+       t2.MACHINE,
+       t2.PROGRAM,
+       t2.LOGON_TIME,
+       t2.COMMAND,
+       t2.LOCKWAIT,
+       t2.SADDR,
+       t2.PADDR,
+       t2.TADDR,
+       t2.SQL_ADDRESS,
+       t1.LOCKED_MODE
+  from v$locked_object t1, v$session t2, dba_objects t3
+ where t1.session_id = t2.sid
+   and t1.object_id = t3.object_id
+ order by t2.logon_time;
+
+-- 解锁
+alter system kill session 'sid,serial#'
+
+
+-- 显示clob字段内容
+select dbms_lob.substr("clob字段")  from table
+
+-- 查询所有表comment信息
+select * from user_tab_comments
+
+-- oracle 表碎片分析
+select table_name,
+       round(blocks * 8 / 1024, 2) "占用空间",
+       round(num_rows * avg_row_len / 1024 / 1024, 2) "实际空间",
+       round(blocks / 10 / 1024, 2) "预留空间",
+       round(blocks * 8 / 1024 - num_rows * avg_row_len / 1024 / 1024 -
+             blocks / 10 / 1024,
+             2) "碎片空间",
+       round(round(blocks * 8 / 1024 - num_rows * avg_row_len / 1024 / 1024 -
+                   blocks / 10 / 1024,
+                   2) / round(blocks * 8 / 1024, 2),
+             2) aaaa,
+       blocks,
+       empty_blocks,
+       num_rows,
+       avg_row_len
+
+  from user_tables
+ where blocks > 0
+--where tablespace_name='CREDIT_TENCENT'
+
+--*-----------------------------------
+-- 整理表，不影响DML操作
+--alter table TABLE_NAME shrink space compact;  --只整理碎片 不回收空间
+-- 重置高水位，此时不能有DML操作
+ALTER TABLE T_VIDEO_ORDER ENABLE ROW MOVEMENT; --启动行移动功能
+ALTER TABLE T_VIDEO_ORDER SHRINK SPACE CASCADE; --整理碎片（含索引：CASCADE）并回收空间，并调整水位线。业务少时执行
+ALTER TABLE T_VIDEO_ORDER DISABLE ROW MOVEMENT;--关闭行移动
+-- 分析表
+ANALYZE TABLE T_VIDEO_ORDER COMPUTE STATISTICS;
+--*-----------------------------------
+
+---------------------
+-- 分析索引碎片
+ANALYZE INDEX T_VIDEO_ORDER_AUDIT_ID VALIDATE STRUCTURE;
+-- 查询分析后的锁片数据比例
+SELECT NAME, HEIGHT, PCT_USED, DEL_LF_ROWS / LF_ROWS FROM INDEX_STATS;
+-- 整理索引碎片
+ALTER INDEX T_VIDEO_ORDER_AUDIT_ID REBUILD ONLINE;
+---------------------
+-- 正常的系统收集  命令行执行
+SQL> EXEC DBMS_STATS.GATHER_TABLE_STATS('CREDIT_TENCENT','INTERFACE_GROUP_LIST',CASCADE=>TRUE); 
+
+-- 查询表的删除，插入，修改记录次数
+SELECT * FROM USER_TAB_MODIFICATIONS;
