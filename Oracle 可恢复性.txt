@@ -1,0 +1,119 @@
+==为数据库增加控制文件==
+
+sqlplus / as sysdba
+
+SQL> select name from v$controlfile;
+     备份spfile
+SQL> create pfile='/home/oracle/pfile.ora' from spfile;
+
+SQL> alter system set control_files='/u01/app/oracle/oradata/ORCL/control01.ctl','/u01/app/oracle/fast_recovery_area/ORCL/control02.ctl','/u01/app/oracle/oradata/ORCL/control03.ctl' scope=spfile;
+
+关闭数据库
+
+在操作系统中复制控制文件
+[oracle@db11 ~]$ cd /u01/app/oracle/oradata/ORCL/
+[oracle@db11 ORCL]$ cp control01.ctl control03.ctl
+
+打开数据库
+sql>startup
+SQL> select name from v$controlfile;
+
+==为数据库调整重做日志==
+
+1）用SQL*Plus，以具有SYSDBA角色用户连接实例。
+sqlplus / as sysdba
+
+2）使用下面查询来查看连机日志的状态。
+sql>select group#,status,member from v$logfile order by group#;
+
+3）调整 redo log 为 4组 20M
+查看当前状态，记录status为current的日志，如日志1，先不进行调整。
+select group#,status,bytes/1024/1024 from v$log;
+添加新日志 group 4；
+alter database add logfile group 4 '/u01/app/oracle/oradata/ORCL/redo04.log' size 20M;
+查询redo log的状态
+select * from v$log
+
+删除状态为INACTIVE的日志，如：日志组2、3，并重新添加。
+alter database drop logfile group 2;
+alter database drop logfile group 3;
+alter database add logfile group 2 '/u01/app/oracle/oradata/ORCL/redo02.log' size 20M reuse;
+alter database add logfile group 3 '/u01/app/oracle/oradata/ORCL/redo03.log' size 20M reuse;
+
+切换日志
+alter system switch logfile;
+尝试删除日志组1
+alter database drop logfile group 1;
+select group#,status,bytes/1024/1024 from v$log;
+发现是active状态，不能删除，需要先执行检查点
+alter system checkpoint;
+执行检查点后，再次查看状态。
+select group#,status,bytes/1024/1024 from v$log;
+状态是INACTIVE
+删除并添加日志组1；
+alter database drop logfile group 1;
+alter database add logfile group 1 '/u01/app/oracle/oradata/ORCL/redo01.log' size 20M reuse;
+select group#,status,bytes/1024/1024 from v$log;
+查看状态，完成目标。
+
+redo log 的大小和组数配置，参考alter_SID.log中的
+Checkpoint not complete的频率，尽量控制在一天10次以下。
+参考值：
+100MB * 4
+200MB * 4
+500MB * 4
+500MB * 8
+
+4）添加成员
+alter database add logfile member '/u01/app/oracle/oradata/ORCL/redo01_2.log' to group 1;
+
+select * from v$logfile;
+
+==配置数据库为归档模式==
+
+1）使用相应的操作系统命令创建两个目录 
+
+mkdir -p /u01/oracle/archive1 
+mkdir -p /u01/oracle/archive2 
+
+2）以具有SYSDBA角色的用户登录 
+
+sqlplus / as sysdba
+
+3） 修改参数指定归档目的地和日志文件的格式
+
+alter system set log_archive_dest_1='location=/u01/oracle/archive1' scope=spfile; 
+alter system set log_archive_dest_2='location=/u01/oracle/archive2' scope=spfile; 
+
+
+4） 正常关闭数据库 
+
+Sql>shutdown immediate 
+
+5、启动数据库到MOUNT模式 
+
+Sql> startup mount; 
+select NAME,LOG_MODE from v$database;
+6）将数据库转换为archivelog模式
+
+Sql> alter database archivelog;
+--若切换到非归档模式
+--alter database noarchivelog;
+select NAME,LOG_MODE from v$database;
+
+7）打开数据库 
+Sql> alter database open; 
+
+8）执行下面查询，确定数据库运行于归档模式并且归档进程正在运行。 
+
+Sql>select log_mode from v$database; 
+
+Sql>select archiver from v$instance;
+
+9）执行一次日志切换 
+
+Sql> alter system switch logfile; 
+
+10）这次切换会把归档日志写到两个目的地，可以通过下面查询确认，也可以通过操作系统确认 
+
+Sql> select name from v$archived_log;
