@@ -1,0 +1,115 @@
+--范围分区--
+1. 创建表空间
+CREATE SMALLFILE TABLESPACE "CUS_TS01" DATAFILE '/u01/app/oracle/oradata/oradb/CUS.data' SIZE 100M AUTOEXTEND ON NEXT 50M MAXSIZE UNLIMITED LOGGING EXTENT MANAGEMENT LOCAL SEGMENT SPACE MANAGEMENT AUTO；
+CREATE SMALLFILE TABLESPACE "CUS_TS02" DATAFILE '/u01/app/oracle/oradata/oradb/CUS2.data' SIZE 100M AUTOEXTEND ON NEXT 50M MAXSIZE UNLIMITED LOGGING EXTENT MANAGEMENT LOCAL SEGMENT SPACE MANAGEMENT AUTO；
+CREATE SMALLFILE TABLESPACE "CUS_TS03" DATAFILE '/u01/app/oracle/oradata/oradb/CUS3.data' SIZE 100M AUTOEXTEND ON NEXT 50M MAXSIZE UNLIMITED LOGGING EXTENT MANAGEMENT LOCAL SEGMENT SPACE MANAGEMENT AUTO；
+
+2. 创建范围分区表
+CREATE TABLE CUSTOMER2
+(id int NOT NULL,
+ name varchar(200))
+PARTITION BY RANGE (id)
+(PARTITION CUS_PART1 VALUES LESS THAN (50) TABLESPACE CUS_TS01,
+ PARTITION CUS_PART2 VALUES LESS THAN (100) TABLESPACE CUS_TS02);
+
+
+3. 查看分区信息
+select table_name,partitioning_type,partition_count from user_part_tables where table_name='CUSTOMER';
+select partition_name,high_value,tablespace_name from user_tab_partitions where table_name='CUSTOMER' order by partition_position;
+
+4. 插入数据
+ begin
+   for i in 1..99 loop
+   insert into CUSTOMER values(i,'test');   
+   end loop;
+   end;
+   /
+
+5. 查看某个表分区数据
+      select * from CUSTOMER PARTITION (CUS_PART2);
+select  TABLE_NAME,PARTITION_NAME,HIGH_VALUE,HIGH_VALUE_LENGTH,TABLESPACE_NAME from dba_tab_partitions where TABLE_NAME='CUSTOMER';
+
+6. 添加/删除分区
+ALTER TABLE CUSTOMER ADD PARTITION CUS_PART3 VALUES LESS THAN (MAXVALUE) TABLESPACE CUS_TS03；
+ALTER TABLE CUSTOMER DROP PARTITION CUS_PART2;
+
+7. 截断分区
+ALTER TABLE CUSTOMER TRUNCATE PARTITION CUS_PART2;
+
+8. 合并、拆分分区
+ALTER TABLE CUSTOMER MERGE PARTITIONS CUS_PART1,CUS_PART2 INTO PARTITION CUS_PART2;
+alter table CUSTOMER split partition CUS_PART3 at (2000) into (partition CUS_PART2,partition CUS_PART3);
+
+9.更改分区对应的表空间
+ALTER TABLE CUSTOMER MOVE PARTITION CUS_PART1 TABLESPACE CUS_TS03；
+
+
+附：以时间为范围分区
+CREATE TABLE ORDER_ACTIVITIES
+(ORDER_ID      NUMBER(7) NOT NULL,
+ ORDER_DATE    DATE,
+ TOTAL_AMOUNT NUMBER,
+ CUSTOTMER_ID NUMBER(7),
+ PAID   CHAR(1))
+PARTITION BY RANGE (ORDER_DATE)
+(PARTITION ORD_ACT_PART01 VALUES LESS THAN (TO_DATE('01- MAY -2003','DD-MON-YYYY')) TABLESPACE ORD_TS01,
+ PARTITION ORD_ACT_PART02 VALUES LESS THAN (TO_DATE('01-JUN-2003','DD-MON-YYYY')) TABLESPACE ORD_TS02,
+ PARTITION ORD_ACT_PART02 VALUES LESS THAN (TO_DATE('01-JUL-2003','DD-MON-YYYY')) TABLESPACE ORD_TS03)；
+
+--哈希分区--
+1. 创建HASH分区表
+CREATE TABLE CUSTOMER
+(id int NOT NULL,
+ name varchar(200))
+PARTITION BY hash (id)
+(PARTITION CUS_PART1 TABLESPACE CUS_TS01,
+ PARTITION CUS_PART2 TABLESPACE CUS_TS02);
+
+--列表分区--
+create table CUSTOMER (id number,name varchar2(50))
+ partition by list(id)(
+ partition CUS_PART1 values (1,2,3,4,5,6,7,8,9) tablespace CUS_TS01,
+ partition CUS_PART2 values (10,11,12,13,14,15,16,17,18,19) tablespace CUS_TS02,
+ partition CUS_PART3 values (default) tablespace CUS_TS03);
+
+--范围列表分区--
+CREATE TABLE SALES
+(id int,
+name varchar(200))
+PARTITION BY RANGE(id) SUBPARTITION BY hash (name)
+(PARTITION P1 VALUES LESS THAN(100)
+  (SUBPARTITION P1SUB1 TABLESPACE CUS_TS01,
+   SUBPARTITION P1SUB2 TABLESPACE CUS_TS02),
+   PARTITION P2 VALUES LESS THAN (MAXVALUE)
+  (SUBPARTITION P2SUB1 TABLESPACE CUS_TS01,
+      SUBPARTITION P2SUB2 TABLESPACE CUS_TS02 ))
+
+
+ begin
+   for i in 1..200 loop
+   insert into SALES values(i,i);   
+   end loop;
+   end;
+   /
+
+select * from SALES PARTITION (P1);
+
+select * from SALES SUBPARTITION (P1SUB2);
+
+
+--索引--
+全局索引（无分区）
+create index CUSTOMER_global on CUSTOMER(id) global;
+全局索引（分区）
+create index CUSTOMER_global on CUSTOMER(id)
+global partition by range(id)
+(partition p1 values less than (100000),
+ partition p2 values less than (200000),
+ partition p3 values less than (MAXVALUE));
+
+本地前缀索引（分区）
+create index CUSTOMER_local on CUSTOMER(id) local;
+本地非前缀索引
+create index CUSTOMER_local on CUSTOMER(name) local;
+
+
