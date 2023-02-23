@@ -1,0 +1,54 @@
+--外部表
+运行select时Oracle直接读取外部文件中的数据，而不将数据导入到Oracle数据库中。
+适用场景：使用Oracle对外部文件做只读查询。
+
+	特殊的使用案例：使用外部表读取alert_SID.log。
+
+1、数据文件格式 ext_test.txt
+mkdir /u01/extab
+修改SecureCRT会话字符集
+	Session Options -- Appearance -- UTF-8
+vim /u01/extab/ext_test.txt
+
+20080629,修改,1301110022,邹雪辉,01110022
+20080629,修改,1302050023,王晓斌,02050023
+20080629,修改,1306060130,邵静,06060130
+20080629,修改,1304020386,张晋,04020386
+20080629,修改,1301070082,
+
+2、创建目录
+Sql> create or replace directory extab_dir as '/u01/extab';
+
+
+3、创建外部表:
+
+create table ext_test
+	(test_date varchar2(10),
+	pro_no varchar2(30),
+	user_id varchar2(20),
+	user_nm varchar2(20),
+	user_no varchar2(20)
+	) 
+ORGANIZATION EXTERNAL
+	(
+	TYPE ORACLE_LOADER 
+	DEFAULT DIRECTORY extab_dir
+	ACCESS Parameters
+		(
+		RECORDS DELIMITED BY NEWLINE 
+		badfile 'bad_test.txt'   
+		LOGFILE 'log_test.txt'
+		FIELDS TERMINATED BY ","
+		MISSING FIELD VALUES ARE NULL
+		(test_date,pro_no,user_id,user_nm,user_no)
+		)
+	LOCATION('ext_test.txt')
+	)reject limit unlimited;
+
+4、查询外部表
+直接查询会有乱码
+select * from ext_test;
+退出sqlplus，修改客户端字符集
+[oracle@db11 extab]$ export NLS_LANG=AMERICAN_AMERICA.AL32UTF8
+再进行查询
+select * from ext_test;
