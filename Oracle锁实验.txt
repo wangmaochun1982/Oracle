@@ -1,0 +1,170 @@
+锁实验
+=========
+1、使用sqlplus，用system用户登录，打开4个session
+sqlplus system/password
+
+2、在session1中创建一个测试表，插入2条记录
+create table t1 (id number, name varchar2(10));
+insert into t1 values(1,'A');
+insert into t1 values(2,'B');
+commit;
+select * from t1;
+
+update t1 set name='C' where id=1;
+
+3、使用Sql*plus，在session2上执行
+
+sql>update t1 set name='D' where id=1;
+（该语句挂起）
+
+4、在session 3 执行
+sql>update t1 set name='E' where id=2;
+（该语句能正常执行）
+
+5、在session4中执行 
+sql>alter table t1 drop (name);
+第 1 行出现错误:
+ORA-00054: 资源正忙, 但指定以 NOWAIT 方式获取资源
+
+6、在session1、session2、session3中分别提交事务
+commit;
+
+7、在session4中重新执行步骤5。
+
+操作可以正常执行
+
+8、杀死持有锁的会话
+
+  使用Sql*plus， 在 session 1中 执行
+
+update t1 set id=3 where id=1;
+
+  使用Sql*plus，在session2上执行
+
+update t1 set id=4 where id=1;
+
+使用Sql*plus，在session3上执行
+
+SQL> select distinct s.sid,s.serial# from  v$session s, dba_waiters d where 
+s.sid=d.holding_session and sid not in (select waiting_session from dba_waiters);
+
+
+SQL> select sid, serial#, blocking_session, se.sql_id, sq.sql_text from v$session se,v$sql sq
+where se.sql_id=sq.sql_id and se.blocking_session is not null;
+SQL> select sid, serial#, username from v$session where sid in
+(select blocking_session from v$session);
+
+
+SQL>ALTER SYSTEM KILL SESSION 'sid,serial#';
+
+也可以在EM性能页中阻塞会话选项中处理
+
+使用sqlplus， 在 session 1中 执行 观察结果
+
+SQL> SELECT * FROM t1;
+
+
+总结：通过上面实验我们可以得出，在执行DML语句时，ORACLE会产生锁，一个是行级的锁，用来保护一行数据不能同时被两个或两个以上的会话修改，这是session2挂起的原因。
+这个锁称为行级排他锁。除了行级排他锁之外，还产生一个表级共享锁，
+我们在session4中修改表结构报错，表级共享锁不让其他会话获得表级排他锁，因为共享，所以session3可以正常操作。而当表获得表级排他锁时，任何DML操作都不可进行。
+杀死会话是解决锁冲突的最后办法。
+
+
+死锁
+========
+sqlplus system/password
+create table dead_lock_test (id number, name varchar2(10));
+insert into dead_lock_test values(1,'A');
+insert into dead_lock_test values(2,'B');
+commit;
+select * from dead_lock_test;
+
+session1:
+update dead_lock_test set name='C' where id=1;
+session2:
+update dead_lock_test set name='D' where id=2;
+session1:
+update dead_lock_test set name='E' where id=2;
+# 发生等待
+session2:
+update dead_lock_test set name='F' where id=1;
+# session2也发生等待，此时发生死锁，session1
+# session1 报错，最近的一条sql语句被回滚：
+update dead_lock_test set name='E' where id=2
+       *
+ERROR at line 1:
+ORA-00060: deadlock detected while waiting for resource
+
+session1:
+SQL> select * from dead_lock_test;
+
+        ID NAME
+---------- ----------
+         1 C
+         2 B
+		 
+查看告警日志
+[oracle@db11 ~]$ vim /u01/app/oracle/diag/rdbms/orcl/ORCL/trace/alert_ORCL.log   
+Thu Oct 16 12:33:21 2014
+ORA-00060: Deadlock detected. More info in file /u01/app/oracle/diag/rdbms/orcl/ORCL/trace/ORCL_ora_6697.trc.
+
+查看trace文件内容
+[oracle@db11 ~]$ vim /u01/app/oracle/diag/rdbms/orcl/ORCL/trace/ORCL_ora_6697.trc
+
+----- Information for the OTHER waiting sessions -----
+  current SQL:
+  update dead_lock_test set name='F' where id=1
+  
+Information for THIS session:
+----- Current SQL Statement for this session (sql_id=8pm6ht9vnsjd9) -----
+update dead_lock_test set name='E' where id=2
+
+
+对应用的建议：
+
+1. 及时commit;
+2. 降低并发修改;
+3. 在应用层设计锁，仅允许一个会话运行这个模块。
+4. 在每个会话中，按相同的顺序修改数据。
+
+补充：
+ALTER SYSTEM KILL SESSION 不能马上完成的原因：很有可能在回滚。
+ALTER SYSTEM KILL SESSION 是否使用 IMMEDIATE 的差别
+
+SQL> ALTER SYSTEM KILL SESSION 'sid,serial#';
+SQL> ALTER SYSTEM KILL SESSION 'sid,serial#' IMMEDIATE;
+
+如果kill命令执行一段时间后还没有完成，需要查看是否该会话在执行回滚，再决定是否使用操作系统结束进程。
+You can do this by running this script (session_undo.sql). If the USED_UREC value is decreasing for the session in question you should leave it to complete the rollback rather than killing the session at the operating system level.
+
+https://oracle-base.com/articles/misc/killing-oracle-sessions
+
+
+-- -----------------------------------------------------------------------------------
+-- File Name    : https://oracle-base.com/dba/monitoring/session_undo.sql
+-- Author       : Tim Hall
+-- Description  : Displays undo information on relevant database sessions.
+-- Requirements : Access to the V$ views.
+-- Call Syntax  : @session_undo
+-- Last Modified: 29/03/2005
+-- -----------------------------------------------------------------------------------
+SET LINESIZE 200
+
+COLUMN username FORMAT A15
+
+SELECT s.username,
+       s.sid,
+       s.serial#,
+       t.used_ublk,
+       t.used_urec,
+       rs.segment_name,
+       r.rssize,
+       r.status
+FROM   v$transaction t,
+       v$session s,
+       v$rollstat r,
+       dba_rollback_segs rs
+WHERE  s.saddr = t.ses_addr
+AND    t.xidusn = r.usn
+AND    rs.segment_id = t.xidusn
+ORDER BY t.used_ublk DESC;
