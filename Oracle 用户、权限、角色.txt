@@ -1,0 +1,153 @@
+用户、权限、角色
+
+sysdba用户
+  操作系统验证
+sqlplus / as sysdba
+sqlplus abc/bcd as sysdba
+show user
+
+  密码文件验证
+  $ORACLE_HOME/dbs/orapwORCL
+  在连接192.168.56.111:1521/orcl
+sqlplus sys/password123@192.168.56.111:1521/orcl as sysdba
+show user
+
+  查询DBA用户
+select * from dba_role_privs where granted_role='DBA';
+select * from dba_role_privs where granted_role='SYSDBA';
+  查询sysdba用户
+select * from V$PWFILE_USERS;
+
+————————————————————————————
+
+sqlplus / as sysdba 默认进入CDB
+
+--创建pdb数据库cdb1pdb2
+ 
+
+
+SQL> create pluggable database cdb1pdb2
+  
+ admin user pdb2admin identified by pass roles=(connect)
+  
+ file_name_convert=('/app/oracle/ora12c/oradata/cdb1/pdbseed',
+  
+ '/app/oracle/ora12c/oradata/cdb1/cdb1pdb2');
+
+
+打开ORA12PDB可插拔数据库
+alter pluggable database ORA12PDB open;
+
+切换到ORA12PDB的可插拔数据库
+alter session set container=ORA12PDB;
+
+————————————————————————
+
+常规用户
+  查询用户
+select * from dba_users;
+  创建用户
+create user user1 identified by user1 
+default tablespace users
+temporary tablespace temp;
+create user user2 identified by user2;
+create user user3 identified by user3;
+
+CREATE USER "TESTER" 
+IDENTIFIED BY "TESTER" 
+[ DEFAULT TABLESPACE "TESTDATA" ]
+[ TEMPORARY TABLESPACE "TESTTEMP" ]
+[ PROFILE "DEFAULT" ]
+[ ACCOUNT UNLOCK ];
+
+  锁定用户
+alter user hr account lock;
+  解锁用户
+conn hr/hr
+conn scott/tiger
+conn / as sysdba
+alter user hr account unlock;
+alter user scott account unlock;
+  修改用户密码
+alter user scott identified by tiger;
+alter user hr identified by hr;
+conn hr/hr
+conn scott/tiger
+
+  删除用户
+drop user user3 cascade;
+
+查看权限
+  系统权限
+select * from dba_sys_privs;
+  角色赋予
+select * from dba_role_privs;
+  对象权限
+select * from dba_tab_privs where grantee='HR';
+
+  系统权限
+conn user1/user1
+# 无法登陆
+conn / as sysdba
+select * from dba_sys_privs where grantee in ('HR','SCOTT');
+# HR用户有create session权限
+select * from dba_role_privs where grantee in ('HR','SCOTT');
+# SCOTT用户有connect角色
+select * from dba_sys_privs where grantee='CONNECT';
+# CONNECT角色有create session权限
+select * from dba_role_privs where grantee='CONNECT';
+select * from dba_sys_privs where grantee='RESOURCE';
+select * from dba_role_privs where grantee='RESOURCE';
+
+  对象权限
+测试hr对scott.emp的查询权限
+conn hr/hr
+select count(*) from scott.emp;
+授予hr对scott.emp的查询权限
+conn scott/tiger
+grant select on emp to hr;
+再次测试hr对scott.emp的查询权限
+conn hr/hr
+select * from scott.emp;
+测试删除权限
+delete from scott.emp;
+conn / as sysdba
+select * from dba_tab_privs where owner='SCOTT';
+  
+授予权限
+conn / as sysdba
+grant connect to user1 with admin option;
+grant resource to user1;
+conn user1/user1
+grant connect to user2;
+grant resource to user2;
+
+conn / as sysdba
+grant select on scott.emp to user1 with grant option;
+conn user1/user1
+grant select on scott.emp to user2;
+ 
+
+
+收回权限
+revoke connect from user1;
+conn user2/user2
+select * from dba_role_privs where grantee like 'USER%';
+# 系统权限不会级联收回
+
+revoke select on scott.emp from user1;
+select * from dba_tab_privs where grantee like 'USER%';
+# 对象权限会级联收回
+
+
+用户概要文件
+select * from dba_users;
+select * from dba_profiles;
+select * from dba_profiles where RESOURCE_NAME='PASSWORD_LIFE_TIME';
+alter profile default limit FAILED_LOGIN_ATTEMPTS 5;
+alter profile default limit PASSWORD_LIFE_TIME 30;
+alter profile default limit PASSWORD_LIFE_TIME UNLIMITED;
+
+
+
+
