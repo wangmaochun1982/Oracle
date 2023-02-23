@@ -1,0 +1,80 @@
+1、创建操作系统目录：
+
+[oracle@db11 u01]$ 
+
+mkdir /u01/expdata
+
+2、创建Oracle目录，并授权给相关用户
+sqlplus system/password
+create directory dp_dir as '/u01/expdata';
+--select * from dba_directories;
+--grant read,write on directory dp_dir to public;
+
+3、创建测试表
+
+sqlplus system/password
+create table hr.test_dp as select * from all_users;
+select count(*) from hr.test_dp;
+
+4、导出目标对象
+
+通过expdp命令进行导出
+
+按表导出
+[oracle@db11 ~]$ expdp system/password directory=dp_dir dumpfile=test_dp.dmp logfile=test_dp-exp.log tables=hr.test_dp,hr.employees,scott.emp
+
+按用户导出
+expdp system/password directory=dp_dir dumpfile=scott.dmp logfile=scott-exp.log schemas=scott
+
+expdp system/password directory=dp_dir dumpfile=hr.dmp logfile=hr-exp.log schemas=hr
+
+5、删除测试表 
+drop table hr.test_dp;
+select count(*) from hr.test_dp;
+
+6、导入导出文件
+
+通过impdp命令进行导入
+
+按表导入
+[oracle@db11 ~]$ impdp system/password directory=dp_dir dumpfile=test_dp.dmp logfile=test_dp-imp.log tables=hr.test_dp
+
+select count(*) from hr.test_dp; 
+
+导入时进行重映射（表空间、用户）
+select owner,tablespace_name,table_name from dba_tables where table_name='TEST_DP';
+
+impdp system/password directory=dp_dir dumpfile=test_dp.dmp logfile=test_dp-imp-hr-scott.log tables=hr.test_dp remap_schema=hr:scott remap_tablespace=USERS:EXAMPLE
+
+select count(*) from hr.test_dp;
+select count(*) from scott.test_dp;
+
+导入到不存在的用户前不必创建该用户
+impdp system/password directory=dp_dir dumpfile=scott.dmp logfile=scott-imp.log remap_schema=scott:scott1
+
+参数：
+CONTENT
+Specifies data to load.
+Valid keywords are: [ALL], DATA_ONLY and METADATA_ONLY.
+
+TABLE_EXISTS_ACTION
+Action to take if imported object already exists.
+Valid keywords are: APPEND, REPLACE, [SKIP] and TRUNCATE.
+
+CLUSTER
+Utilize cluster resources and distribute workers across the Oracle RAC.
+Valid keyword values are: [Y] and N.
+建议为N
+
+PARALLEL
+Change the number of active workers for current job.
+
+expdp system/password directory=dp_dir PARALLEL=3 dumpfile=test_dp_%U.dmp logfile=test_dp-exp.log tables=hr.test_dp,hr.employees,scott.emp
+
+其他参数：
+expdp -help
+impdp -help
+
+参考：
+http://blog.csdn.net/leshami/article/details/5925592
+http://blog.csdn.net/leshami/article/details/5926276
