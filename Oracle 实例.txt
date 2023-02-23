@@ -1,0 +1,236 @@
+Oracle需要独立启停的三个组件：OEM，监听，数据库。
+
+启停方法如下：
+
+==Oracle Enterprise Manager===
+（在浏览器中监控、管理Oracle数据库的工具，可不启动）
+OEM启动：
+[oracle@db11 ~]$ emctl start dbconsole
+	外部浏览器访问OEM  https://192.168.56.111:1158/em
+emctl {start|stop|status} dbconsole
+
+===监听===
+[oracle@db11 ~]$ lsnrctl start [LISTENER]
+[oracle@db11 ~]$ lsnrctl status
+[oracle@db11 ~]$ lsnrctl stop
+
+===数据库===
+[oracle@db11 ~]$ sqlplus / as sysdba
+启动数据库：
+ SQL> startup
+查看数据库状态：
+ SQL> select status from v$instance;
+关闭数据库：
+ SQL> shutdown immediate;
+
+
+查看告警日志路径
+ SQL> show parameter dump
+
+NAME                     TYPE        VALUE
+------------------------------------ -
+background_dump_dest     string      /u01/app/oracle/diag/rdbms/orcl/ORCL/trace
+
+跟踪查看告警日志内容
+[oracle@db11 trace]$ cd /u01/app/oracle/diag/rdbms/orcl/ORCL/trace
+[oracle@db11 trace]$ tail -f alert_ORCL.log 
+
+==数据库实例运行的四种状态==
+实例关闭
+NOMOUNT
+MOUNT
+OPEN
+
+
+==数据库启动阶段==
+===1. 关闭-->nomount===
+ SQL> startup nomount
+根据参数文件，启动实例，
+建立了内存结构，启动了进程。
+
+ SQL> select instance_name, status from v$instance;
+INSTANCE_NAME    STATUS
+---------------- ------------
+ORCL             STARTED
+
+ SQL> select * from v$controlfile;
+no rows selected
+
+ SQL> select * from v$log;
+select * from v$log
+              *
+ERROR at line 1:
+ORA-01507: database not mounted
+
+
+===2. nomount-->mount===
+ SQL> alter database mount;
+加载控制文件，
+redolog信息、数据文件信息可以查看到。
+数据文件尚未打开。
+
+ SQL> col name format a55;
+ SQL> select  STATUS,NAME from v$controlfile;
+STATUS  NAME
+------- -------------------------------------------------------
+        /u01/app/oracle/oradata/ORCL/control01.ctl
+        /u01/app/oracle/fast_recovery_area/ORCL/control02.ctl
+ SQL> select GROUP#, STATUS from v$log;
+    GROUP# STATUS
+---------- ----------------
+         1 INACTIVE
+         3 INACTIVE
+         2 CURRENT
+ SQL> select * from scott.emp;
+select * from scott.emp
+                    *
+ERROR at line 1:
+ORA-01219: database not open: queries allowed on fixed tables/views only		
+		
+===3. mount-->open===
+ SQL> alter database open;
+*打开数据库（数据文件），
+*如果是非正常关闭的，会执行数据库恢复。
+ SQL> select * from scott.emp;
+ 14 rows selected.
+
+====数据恢复相关告警日志====
+ Fri Mar 27 12:52:01 2015
+ alter database open
+ Beginning crash recovery of 1 threads
+  parallel recovery started with 2 processes
+ Started redo scan
+ Completed redo scan
+  read 201 KB redo, 100 data blocks need recovery
+ Started redo application at
+  Thread 1: logseq 50, block 46071
+ Recovery of Online Redo Log: Thread 1 Group 2 Seq 50 Reading mem 0
+   Mem# 0: /u01/app/oracle/oradata/ORCL/redo02.log
+ Completed redo application of 0.16MB
+ Completed crash recovery at
+  Thread 1: logseq 50, block 46474, scn 1471584
+  100 data blocks read, 100 data blocks written, 201 redo k-bytes read
+ Fri Mar 27 12:52:01 2015
+
+
+ SQL> startup nomount
+ SQL> show parameter spfile
+ SQL> select status from v$instance;
+ SQL> select name from v$controlfile;
+ SQL> select name from v$datefile;
+
+ SQL> alter database mount;
+ SQL> select status from v$instance;
+ SQL> select name from v$controlfile;
+ SQL> select name from v$datefile;
+ SQL> select file_name from dba_data_files;
+
+ SQL> alter database open;
+ SQL> select status from v$instance;
+ SQL> select file_name from dba_data_files;
+
+==数据库关闭模式==
+ SQL> shutdown normal
+ SQL> shutdown transactional
+ SQL> shutdown immediate
+ SQL> shutdown abort
+
+normal: 
+*不允许新连接，
+*等待所有数据库连接主动退出，
+*然后执行数据库关闭。
+*（很少使用）
+transactional: 
+*等待当前所有事务执行完毕，
+*然后关闭数据库。
+immediate: 
+*将当前所有运行的事务回滚，
+*然后执行检查点，将所有脏数据写入磁盘，
+*关闭数据库。
+abort: 
+*杀死所有数据库进程，回收内存结构，
+*不将脏数据写入磁盘。
+*（慎用）
+
+
+==参数==
+select name,value from v$parameter;
+select name,value from v$spparameter; --spfile中的参数值
+
+ SQL> show parameter processes;
+ SQL> show parameter control_files;
+ SQL> show parameter mem;
+ SQL> show parameter spfile;
+  如果有spfile的显示，说明是用的是spfile
+  如果显示为空，说明使用的是pfile。
+  
+ spfile: 二进制，有校验位，不能直接编辑，在数据库中进行修改(alter system set ... scope=spfile;)
+ pfile: 纯文本，可以直接用文本编辑器编辑，不在数据库中进行修改。
+===修改参数===
+ 修改内存中的参数
+ alter system set 参数=值 scope=memory;
+ SQL> alter system set db_cache_size=100M scope=memory;
+ （立即生效，重启后失效）
+ 
+ 修改文件中的参数
+ spfile：SQL> alter system set db_cache_size=100M scope=spfile;
+ pfile : vim 编辑参数文件$ORACLE_HOME/dbs/initSID.ora，修改参数。
+ （当前不生效，重启之后生效）
+ 
+ 同时修改内存和文件中的参数
+ spfile：SQL> alter system set db_cache_size=100M scope=both;
+ pfile :在内存和文件中分别修改
+
+==参数文件==
+	参数文件路径：$ORACLE_HOME/dbs
+Oracle在启动时会依次寻找下面三个文件，并使用第一个有效文件。
+	spfile<SID>.ora
+	spfile.ora
+	init<SID>.ora
+
+查看使用的参数文件
+show parameter spfile
+
+===创建pfile===
+ --SQL> create pfile from spfile; 
+  创建到$ORACLE_HOME/dbs/initORCL.ora，如果在RAC中会出故障，因为RAC中本来就有$ORACLE_HOME/dbs/initORCL.ora文件，如果执行上面的语句，这个文件的内容会被覆盖。
+ SQL> create pfile='/home/oracle/pfile.ora' from spfile; #推荐
+ 
+ 使用pfile启动数据库：
+ SQL> startup pfile='/home/oracle/pfile.ora'
+ 
+===创建spfile===
+ SQL> create spfile from pfile='/home/oracle/pfile.ora';
+
+修改pfile
+  直接使用vim修改
+
+修改spfile
+  alter system set processes=100 scope=spfile;
+
+===实验：模拟spfile参数设置不当===
+ SQL> alter system set processes=1000 scope=spfile;
+ SQL> shutdown immediate;
+ SQL> startup
+发现启动失败
+ SQL> alter system set processes=100 scope=spfile;
+ alter system set processes=100 scope=spfile
+ *
+ ERROR at line 1:
+ ORA-01034: ORACLE not available
+ Process ID: 0
+ Session ID: 125 Serial number: 3
+发现数据库未启动，无法修改
+
+解决：
+强制使用pfile启动
+ SQL> startup pfile='/home/oracle/pfile.ora'
+由正常的pfile创建回spfile
+ SQL> create spfile from pfile='/home/oracle/pfile.ora';
+
+关闭，重启数据库
+ show parameter spfile;
+
+
+
+
