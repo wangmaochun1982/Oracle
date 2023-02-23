@@ -1,0 +1,160 @@
+闪回DROP
+
+1、使用SQL*Plus，以SYSTEM用户登录
+sqlplus system/password
+
+2、创建一个测试用户
+
+SQL> create user testuser identified by testuser;
+SQL> grant connect,resource to testuser;
+
+3、以TESTUSER连接数据库
+
+SQL> conn testuser/testuser;
+
+4、创建一个具有索引和约束的新表
+
+SQL> create table test (id number);
+SQL> create index test_idx on test(id);
+SQL> alter table test add (constraint id_uk unique(id));
+SQL> insert into test values(1);
+SQL> commit;
+
+5、确认模式中的内容
+
+SQL> select object_name,object_type from user_objects;
+SQL> select constraint_name,constraint_type,table_name from user_constraints;
+
+6、删除新建的表
+
+SQL> drop table test;
+
+7、重新运行步骤5的查询；
+
+8、通过查询回收站查看原有名称与回收站名称的映射；
+SQL> select object_name,original_name,type from user_recyclebin;
+
+9、执行Flashback drop恢复被删除的表
+SQL> flashback table test to before drop;
+
+10、运行步骤5的查询
+
+11、将索引与约束重命名为原来的名称
+SQL> alter index "" rename to test_idx;
+SQL> alter table test rename constraint "" to id_uk;
+
+12、运行步骤5的查询，确认闪回成功
+
+13、以SYSTEM用户登录，删除测试用户
+SQL> drop user testuser cascade;
+
+14、查询DBA_RECYECLEBIN，确认testuser的对象被真正删除
+SQL>select count(*) from dba_recyclebin where owner='TESTUSER';
+
+
+闪回查询/闪回DML/闪回表
+
+1、使用SQL*Plus，以SYSTEM用户登录,解锁SCOTT用户
+SQL>alter user scott account unlock;
+SQL>alter user scott identified by tiger;
+
+2、以SCOTT连接数据库
+
+SQL>conn scott/tiger;
+
+3、查询EMP表信息
+
+set time on;
+SQL>select * from emp;
+
+4、启用EMP表的行移动功能;
+
+SQL>alter table emp enable row movement;
+
+
+5、删除EMP表记录
+
+SQL> delete from emp；
+SQL> commit;
+
+ select count(*) from emp;
+
+==闪回查询==
+select count(*) from emp as of TIMESTAMP to_timestamp('2014-12-26 22:34:00', 'YYYY-MM-DD HH24:MI:SS');
+
+
+==闪回表==
+
+SQL> flashback table emp TO TIMESTAMP to_timestamp('2009-12-13 18:31:54', 'YYYY-MM-DD HH24:MI:SS')
+
+7、查询EMP，确认闪回成功。
+
+
+==闪回数据库==
+启用数据库闪回，模拟一个用户错误，闪回到错误发生之前
+
+1、使用SQL*Plus，以SYSDBA用户连接到数据库,确保数据库运行于归档模式
+     archive log list;
+SQL> select log_mode from v$database;
+SQL> select archiver from v$instance;
+
+如果没有返回 ARCHIVELOG 和 STARTED，则配置为归档模式。
+
+2、启用数据库闪回功能,设置闪回目标为两天
+
+SQL> shutdown immediate;
+SQL> startup mount;
+SQL> ALTER SYSTEM SET DB_FLASHBACK_RETENTION_TARGET=2880;
+SQL> ALTER DATABASE FLASHBACK ON;
+SQL> alter database open;
+
+
+3、启用SQL*Plus的时间提示
+SQL> set time on;
+
+4、删除用户SCOTT；
+SQL> drop user scott cascade;
+
+5、查询SCOTT模式下的表
+SQL> select * from scott.emp;
+
+6、关闭数据库启动到装载状态
+SQL> shutdown immediate;
+SQL> startup mount;
+
+７、进行数据库闪回
+SQL> FLASHBACK DATABASE TO TIMESTAMP TO_TIMESTAMP('2015-07-16 12:03:05','YYYY-MM-DD HH24:MI:SS');
+
+8、查询SCOTT模式下的表，确保验证闪回成功。
+SQL>alter database open read only;
+
+9、以读写打开
+SQL>shutdown immediate;
+SQL>startup mount;
+SQL>alter database open resetlogs;
+
+为什么Flashback Log产生量要远少于Redo Log?
+http://www.askmaclean.com/archives/category/oracle/flashback-query-database
+
+
+Oracle Flashback Technologies
+http://www.oracle.com/technetwork/documentation/flashback-overview-082751.html
+
+Flashback Database: restore the entire database to a specific point-in-time, using Oracle-optimized flashback logs, rather than via backups and forward recovery.
+
+Flashback Table: easily recover tables to a specific point-in-time, useful when a logical corruption is limited to one or a set of tables instead of the entire database.
+
+Flashback Drop: recover an accidentally dropped table. It restores the dropped table, and all of its indexes, constraints, and triggers, from the Recycle Bin (a logical container of all dropped objects).
+
+Flashback Transaction: undo the effects of a single transaction, and optionally, all of its dependent transactions. via a single PL/SQL operation or by using an Enterprise Manager wizard.
+
+Flashback Transaction Query:  see all the changes made by a specific transaction, useful when an erroneous transaction changed data in multiple rows or tables.
+
+Flashback Query: query any data at some point-in-time in the past. This powerful feature can be used to view and logically reconstruct corrupted data that may have been deleted or changed inadvertently.
+
+Flashback Versions Query: retrieve different versions of a row across a specified time interval instead of a single point-in-time.
+
+http://docs.oracle.com/cd/E11882_01/appdev.112/e41502/adfns_flashback.htm
+http://education.oracle.com/pls/web_prod-plq-dad/db_pages.getpage?page_id=5001&get_params=p_exam_id:1Z0-053
+
+http://www.cnblogs.com/coohoo/archive/2011/01/16/1936888.html
