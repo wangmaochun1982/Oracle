@@ -1,0 +1,165 @@
+参考文档：
+
+文档 1
+Oracle Database Installation Guide 11g Release 2 (11.2) for Linux
+http://docs.oracle.com/cd/E11882_01/install.112/e47689/toc.htm
+
+文档 2
+Oracle Database 11g Release 2 (11.2) Installation On Oracle Linux 6
+http://www.oracle-base.com/articles/11g/oracle-db-11gr2-installation-on-oracle-linux-6.php
+
+主要流程：
+1. 规划os/db版本、存储、网络（IP、主机名）
+	 Linux  Red Hat Enterprise Linux 6, Oracle Linux 6
+	 DB     Oracle  11.2.0.4.6   10.2.0.5  9.2.0.8
+	 存储   SAN     用于Oracle RAC
+	 网络   IP、主机名、多路径
+2. 安装操作系统
+     Linux  标准安装/最小化安装，启用图形界面
+3. 配置操作系统
+     最复杂
+4. 安装Oracle数据库软件
+     
+5. 创建监听、数据库
+
+
+实验：
+在 VirtualBox 虚拟机上安装 Oracle Linux 6.4 + Oracle Database 11.2。
+
+难点：
+为安装Oracle数据库对操作系统进行配置。
+
+实验过程：
+1. 下载 VirtualBox、Oracle Linux 和 Oracle Database 软件包
+2. 安装 VirtualBox，新建虚拟机，安装 Oracle Linux
+3. 执行 Oracle 数据库安装前的操作系统配置
+
+3.1 配置网络ip、hosts
+[root@oranode2 ~]# ifconfig
+[root@oranode2 ~]# vim /etc/hosts
+添加以下内容：
+192.168.56.112  oranode2
+
+[root@oranode2 ~]# ping oranode2
+
+3.1.1 上传与解压数据库软件
+执行本步骤等待的时候，可以同时做后面的操作
+上传软件
+在SecureCRT标签上右键，connect sftp session
+sftp> mkdir /orasoft
+sftp> cd /orasoft
+sftp> lcd E:\Resources\Oracle\7.Softs\112040
+sftp> put p13390677_112040_LINUX_1of7.zip
+sftp> put p13390677_112040_LINUX_2of7.zip
+解压软件
+[root@oranode2 ~]# cd /orasoft
+[root@oranode2 ~]# unzip p13390677_112040_LINUX_1of7.zip
+[root@oranode2 ~]# unzip p13390677_112040_LINUX_2of7.zip
+查看解压后的软件
+[root@oranode2 orasoft]# ls
+database                         p13390677_112040_LINUX_2of7.zip
+p13390677_112040_LINUX_1of7.zip
+
+3.2 关闭防火墙、SELinux
+service iptables status
+service iptables stop
+chkconfig --list iptables
+chkconfig --list ip6tables
+chkconfig iptables off
+chkconfig ip6tables off
+chkconfig --list iptables
+chkconfig --list ip6tables
+
+[root@oranode2 ~]# getenforce
+Enforcing
+[root@oranode2 ~]# setenforce 0
+[root@oranode2 ~]# getenforce
+Permissive
+[root@oranode2 ~]# vim /etc/selinux/config
+修改：
+SELINUX=disabled
+
+配置 yum
+[root@db11 ~]# mkdir /media/cdrom
+在VirtualBox虚拟机里，把Linux安装光盘插入
+[root@db11 ~]# mount /dev/cdrom /media/cdrom
+[root@db11 ~]# mv /etc/yum.repos.d/public-yum-ol6.repo /etc/yum.repos.d/public-yum-ol6.repo.backup
+[root@db11 ~]# vim /etc/yum.repos.d/cdrom.repo
+================================================
+[dvd]
+name=Oracle Linux $releasever Latest ($basearch)
+baseurl=file:///media/cdrom/Server/
+gpgcheck=0
+enabled=1
+================================================
+
+3.3 安装前准备工作
+安装前准备工作当中，有一部分可以由操作系统中oracle-rdbms-server-11gR2-preinstall rpm包自动完成，但这个包只在Oracle Linux中存在。
+这部分工作包括操作系统用户oracle的创建、内核参数的修改、安全限制参数的修改、Oracle所依赖软件包的安装。
+
+如果使用的是Oracle Linux，可以根据3.3.a进行操作，
+如果使用的是其他Linux或Unix，需要根据3.3.b进行操作。
+
+3.3.a 安装 oracle-rdbms-server-11gR2-preinstall
+
+[root@db11 ~]# id oracle
+id: oracle: No such user
+[root@db11 ~]# yum install oracle-rdbms-server-11gR2-preinstall
+[root@db11 ~]# id oracle
+
+oracle-rdbms-server-11gR2-preinstall帮我们做了哪些事情？
+创建oracle用户
+安装软件包
+设置系统参数/etc/sysctl.conf、/etc/security/limits.conf
+
+
+3.4 设置oracle用户密码、.bash_profile文件
+[root@db11 ~]# passwd oracle
+[root@db11 ~]# vim /home/oracle/.bash_profile
+添加以下内容：
+================================================
+# Oracle Settings
+TMP=/tmp; export TMP
+TMPDIR=$TMP; export TMPDIR
+
+ORACLE_HOSTNAME=oranode2#主机名，需要修改; export ORACLE_HOSTNAME
+ORACLE_UNQNAME=NODE2#数据库名，需要修改; export ORACLE_UNQNAME
+ORACLE_BASE=/u01/app/oracle; export ORACLE_BASE
+ORACLE_HOME=$ORACLE_BASE/product/11.2.0/db_1; export ORACLE_HOME
+ORACLE_SID=NODE2#实例名，需要修改; export ORACLE_SID
+
+PATH=$ORACLE_HOME/bin:$PATH; export PATH
+
+#LD_LIBRARY_PATH=$ORACLE_HOME/lib:/lib:/usr/lib; export LD_LIBRARY_PATH
+#CLASSPATH=$ORACLE_HOME/jlib:$ORACLE_HOME/rdbms/jlib; export CLASSPATH
+================================================
+
+3.5 建立软件目录，修改安装文件所有者
+[root@db11 ~]# mkdir -p /u01/app/oracle/product/11.2.0/db_1
+[root@db11 ~]# chown -R oracle:oinstall /u01
+[root@db11 ~]# chmod -R 775 /u01
+
+
+4. 检查配置状况
+
+
+5. 安装 Oracle 数据库
+[root@oranode2 orasoft]# cd /orasoft/
+[root@oranode2 orasoft]# chown -R oracle:oinstall database
+
+
+[oracle@oranode2 ~]$ cd /orasoft/database/
+[oracle@oranode2 database]$ ./runInstaller 
+
+
+使用root用户运行脚本
+
+5. 创建监听
+#如果dbca创建数据库时，不直接启用EM，那么就不需要手动创建监听。监听会在dbca运行后期会自动创建。
+[oracle@oranode2 ~]$ lsnrctl status
+[oracle@oranode2 ~]$ netca
+全部默认，直到提示successful。
+[oracle@oranode2 ~]$ lsnrctl status
+
+6. 创建数据库
+[oracle@oranode2 ~]$ dbca
