@@ -1,0 +1,143 @@
+﻿Oracle 内存管理
+
+http://docs.oracle.com/cd/E11882_01/server.112/e25494/memory.htm#ADMIN11197
+
+memory
+|-sga
+   |- db buffer cache
+   |- shared pool
+   |- redo log buffer
+|-pga
+
+
+DB Buffer Cache
+LRU列表：控制缓存页替换
+Least Recently Used
+
+
+检查点列表：控制增量检查点写回数据文件的数据块列表
+
+三种内存管理模式：
+	手动内存管理
+	ASMM 自动共享内存管理
+	AMM  自动内存管理
+
+
+内存的三种配置方法：
+1. 手动内存管理
+Oracle9i，没有自动调整功能，各个组件大小固定为设置值
+ 设置
+SGA:
+	db_cache_size
+	shared_pool_size
+	large_pool_size
+PGA:
+	sort_area
+	hash_area
+不设置
+	memory_target
+	sga_target
+	pga_aggregate_target
+
+2. 自动共享内存管理ASMM（推荐）
+Oracle10g，Oracle自动调整SGA内部各组件大小
+设置
+SGA:
+	sga_target=300M
+PGA:
+	pga_aggregate_target=100M
+不设置
+	memory_target=0
+
+选择性设置
+	db_cache_size=150M
+	shared_pool_size=100M
+	large_pool_size=0
+	设置值作为下限使用
+
+Modifying Parameters for Automatically Sized Components
+When SGA_TARGET is not set, the automatic shared memory management feature is not enabled. Therefore the rules governing resize for all component parameters are the same as in earlier releases. However, when automatic shared memory management is enabled, the manually specified sizes of automatically sized components serve as a lower bound for the size of the components. You can modify this limit dynamically by changing the values of the corresponding parameters.
+	
+	
+3. 自动内存管理AMM
+Oracle11g，Oracle自动调整SGA内部各组件及PGA的大小
+设置
+memory_target=450M
+
+选择性设置
+sga_target
+pga_aggregate_target
+	db_cache_size
+	shared_pool_size
+	large_pool_size
+设置值作为下限使用
+
+使用下面的命令查看当前内存的使用方式
+[oracle@db11 ~]$ df -h
+AMM使用/dev/shm
+[oracle@db11 ~]$ ipcs
+ASMM使用
+
+示例：
+由ASMM修改为AMM内存管理模式
+sqlplus / as sysdba
+alter system set memory_target=450M scope=spfile;
+startup force
+exit;
+
+[oracle@db11 ~]$ df -h
+AMM使用/dev/shm
+[oracle@db11 ~]$ ipcs
+ASMM使用
+
+
+由AMM修改为ASMM内存管理模式
+sqlplus / as sysdba
+alter system set memory_target=0 scope=spfile;
+  或
+alter system reset memory_target scope=spfile;
+alter system set sga_target=350M scope=spfile;
+alter system set pga_aggregate_target=100M scope=spfile;
+以下可选：
+	设置 db buffer cache 最小为150M，shared pool 最小为100M
+	alter system set db_cache_size=150M scope=spfile;
+	alter system set shared_pool_size=100M scope=spfile;
+startup force
+exit;
+
+[oracle@db11 ~]$ df -h
+AMM使用/dev/shm
+[oracle@db11 ~]$ ipcs
+ASMM使用
+
+
+SQL文本与共享池
+select * from scott.emp;
+select * from scott.EMP;
+select *
+from scott.emp;
+select * from scott.emp where empno=1;
+select * from scott.emp where empno=2;
+select * from scott.emp where empno=3;
+select * from scott.emp where empno=:1;
+select * from v$sql where sql_text like '%scott%';
+
+
+SQL> select * from v$sga_target_advice order by sga_size;
+ 
+  SGA_SIZE SGA_SIZE_FACTOR ESTD_DB_TIME ESTD_DB_TIME_FACTOR ESTD_PHYSICAL_READS
+---------- --------------- ------------ ------------------- -------------------
+       290              .5       448176              1.6578             1636103
+       435             .75       339336              1.2552             1636103
+       580               1       270344                   1             1201780
+       725            1.25       239038               .8842              907584
+       870             1.5       211517               .7824              513881
+      1015            1.75       201866               .7467              513881
+      1160               2       200703               .7424              513881
+	  
+SGA 组件大小调整历史记录
+select * from v$sga_resize_ops;
+	  
+PGA 监控
+select * from v$pgastat;
+select * from v$process;
