@@ -1,0 +1,40 @@
+Create Table Orders
+	(OrderId int ,
+	 CustId int ,  
+	 ProductId int , 
+	 EmpId int NOT NULL,	
+	 Unitprice int NOT NULL,  
+	 Quantity int NOT NULL,    
+	 OrderDate int NOT NULL,  
+	 Note char(100) NOT NULL)
+ PARTITION BY RANGE(productid)(
+ PARTITION t_range_p1 values less than (2500) tablespace users,
+ PARTITION t_range_p2 values less than (5000) tablespace example,
+ PARTITION t_range_p3 values less than (7500) tablespace system,
+ PARTITION t_range_p4 values less than (10000) tablespace  users);
+
+Create Table Orders
+	(OrderId int NOT NULL,
+	 CustId int NOT NULL,   
+	 ProductId int NOT NULL, 
+	 EmpId int NOT NULL,		
+	 Unitprice int NOT NULL,  
+	 Quantity int NOT NULL,   
+	 OrderDate int NOT NULL,  
+	 Note char(100) NOT NULL,
+         CONSTRAINT order__id_pk05
+         PRIMARY KEY (orderid))
+         ORGANIZATION INDEX£»
+
+
+
+
+
+declare  i int :=1;
+begin   
+while i<10000 loop
+insert into orders values(i, abs(mod(dbms_random.random,3)), abs(mod(dbms_random.random,10000)), abs(mod(dbms_random.random,10000)), abs(mod(dbms_random.random,10000)), abs(mod(dbms_random.random,10000)), abs(mod(dbms_random.random,10000)),DBMS_RANDOM.STRING('A',10));
+i:=i+1;
+end loop;
+end ;
+/
