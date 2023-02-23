@@ -1,0 +1,43 @@
+@@ -0,0 +1,42 @@
+-- 整理表，不影响DML操作
+--alter table TABLE_NAME shrink space compact;  --只整理碎片 不回收空间
+-- 重置高水位，此时不能有DML操作
+ALTER TABLE "表名" ENABLE ROW MOVEMENT; --启动行移动功能
+ALTER TABLE "表名" SHRINK SPACE CASCADE; --整理碎片（含索引：CASCADE）并回收空间，并调整水位线。业务少时执行
+ALTER TABLE "表名" DISABLE ROW MOVEMENT;--关闭行移动
+-- 分析表
+ANALYZE TABLE "表名" COMPUTE STATISTICS;
+
+---------------------
+-- 分析索引碎片
+ANALYZE INDEX "表名索引名" VALIDATE STRUCTURE;
+-- 查询分析后的锁片数据比例
+SELECT NAME, HEIGHT, PCT_USED, DEL_LF_ROWS / LF_ROWS FROM INDEX_STATS;
+-- 整理索引碎片
+ALTER INDEX "表名索引名" REBUILD ONLINE;
+---------------------
+-- 正常的系统收集
+EXEC DBMS_STATS.GATHER_TABLE_STATS('实例名','表名',CASCADE=>TRUE); 
+
+-- 查询表的删除，插入，修改记录次数
+SELECT * FROM USER_TAB_MODIFICATIONS;
+
+
+SELECT TABLE_NAME,
+       ROUND(BLOCKS * 8 / 1024, 2) "占用空间",
+       ROUND(NUM_ROWS * AVG_ROW_LEN / 1024 / 1024, 2) "实际空间",
+       ROUND(BLOCKS / 10 / 1024, 2) "预留空间",
+       ROUND(BLOCKS * 8 / 1024 - NUM_ROWS * AVG_ROW_LEN / 1024 / 1024 -
+             BLOCKS / 10 / 1024,
+             2) "碎片空间",
+       ROUND(ROUND(BLOCKS * 8 / 1024 - NUM_ROWS * AVG_ROW_LEN / 1024 / 1024 -
+                   BLOCKS / 10 / 1024,
+                   2) / ROUND(BLOCKS * 8 / 1024, 2),
+             2) 碎片百分比,
+       BLOCKS,
+       EMPTY_BLOCKS,
+       NUM_ROWS,
+       AVG_ROW_LEN
+  FROM USER_TABLES
+ WHERE BLOCKS > 0
+--WHERE TABLESPACE_NAME='CREDIT_TENCENT'
