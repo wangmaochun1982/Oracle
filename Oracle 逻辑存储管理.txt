@@ -25,14 +25,14 @@ sqlplus system/password
 
 ==创建表空间==
 create tablespace testtbs 
-datafile '/u01/app/oracle/oradata/ORCL/testtbs01.dbf' size 10m
-autoextend on next 10m maxsize 100m
+datafile '/u01/app/oracle/oradata/ORCL/testtbs01.dbf' size 100m
+autoextend on next 100m maxsize 32766m
 extent management local autoallocate
 segment space management auto;
 
 size:  大小
 autoextend on ： 启用数据文件自动扩展
-    next 10m maxsize 100m ： 自动扩展的扩展量
+    next 100m maxsize 32766m ： 自动扩展的扩展量
 extent management DICTIONARY ：区管理：字典管理（不建议）
 extent management local ：区管理：本地管理（默认）
 	autoallocate ： 新分配的区大小自动调整（默认）
@@ -59,10 +59,10 @@ IOTs and other special tables like clustered tables, global temporary tables, se
 ===调整数据文件大小===
 alter database datafile '/u01/app/oracle/oradata/ORCL/testtbs01.dbf' resize 5m;
 ===调整数据文件，启用自动扩展===
-alter database datafile '/u01/app/oracle/oradata/ORCL/testtbs01.dbf' autoextend on next 10m maxsize 200m;
+alter database datafile '/u01/app/oracle/oradata/ORCL/testtbs01.dbf' autoextend on next 100m maxsize 32766m;
 ===为表空间增加数据文件===
 alter tablespace testtbs 
-add datafile '/u01/app/oracle/oradata/ORCL/testtbs02.dbf' size 10m;
+add datafile '/u01/app/oracle/oradata/ORCL/testtbs02.dbf' size 100m;
 
 select * from dba_data_files;
 
