@@ -69,3 +69,13 @@ select tablespace_name,
   from dba_free_space
 group by tablespace_name
 order by 2;
+
+估算表在高水位线下还有多少空间是无数据的，但在全表扫描时又需要做无用功的数据，
+這個值應當越低越好，表使用率越接近高水位線，全表掃描所做的無用功也就越少!
+SELECT TABLE_NAME,
+       (BLOCKS * 8192 / 1024 / 1024) -
+       (NUM_ROWS * AVG_ROW_LEN / 1024 / 1024) "Data lower than HWM in MB"
+  FROM dba_TABLES
+ WHERE table_name = 'TH_SN_WIP_LOG';
+
+
