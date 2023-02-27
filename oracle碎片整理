@@ -79,3 +79,19 @@ SELECT TABLE_NAME,
  WHERE table_name = 'TH_SN_WIP_LOG';
 
 
+使用如下中的腳本找出某個Schema中表碎片超過25%的表。使用此腳本前，先確定Schema中表統計信息收集完整。
+
+SELECT table_name,
+       ROUND((blocks * 8)/1024, 2) "高水位空間M",
+       ROUND((num_rows * avg_row_len / 1024 /1024), 2) "真實使用空間M",
+       ROUND((blocks * 10 / 100) * 8 /1024  , 2) "預留空間(pctfree) M",
+       ROUND((blocks * 8 - (num_rows * avg_row_len / 1024) -
+             blocks * 8 * 10 / 100),  2) "浪費空間k"
+  FROM dba_tables
+ WHERE table_name = 'TH_SN_WIP_LOG';
+
+预留:估计是表预留10%算，已分配的blocks-实际用的-预留的，剩下就是浪费空间
+说明：如果有碎片浪费空间最好都清理一下。建议清理碎片程度计算范围
+1-(真实使用空间/高水位空间)>8%
+
+
