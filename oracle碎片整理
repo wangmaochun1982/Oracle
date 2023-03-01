@@ -109,3 +109,15 @@ select table_name,
  where (round((blocks * 8), 2) > round((num_rows * avg_row_len / 1024), 2))
  order by 4 desc;
  
+ 
+ select table_name,
+       round((blocks * 8) / 1024 / 1024, 2) "table size gb",
+       round((num_rows * avg_row_len / 1024 / 1024 /1024), 2) "actual data in table GB",
+       round((blocks * 8 / 1024 / 1024 ), 2) - round((num_rows * avg_row_len / 1024 / 1024 / 1024), 2) "wasted space Gb",
+       ((round((blocks * 8), 2) - round((num_rows * avg_row_len / 1024), 2)) /
+       (round((blocks * 8), 2))) * 100 "percent fragmented"
+  from dba_tables t
+ where t.owner = 'EMESP'
+   and round((blocks * 8), 2) > 0
+   order by  4 desc
+
