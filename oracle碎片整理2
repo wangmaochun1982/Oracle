@@ -3,16 +3,17 @@ select round(sum(bytes/1024/1024/1024),2) G from dba_data_files ;
 實际上表使用的空間約211GB
 select round(sum(bytes/1024/1024/1024),2) G from dba_segments ;
 --這個是support腳本，檢查表空間碎片數
+--這個是support腳本，檢查表空間碎片數
 select substr(a.tablespace_name, 1, 20) tablespace,
        round(sum(a.total1) / 1024 / 1024 / 1024, 1) Total,
-       round(sum(a.total1) / 1024 / 1024 /1024, 1) -
+       round(sum(a.total1) / 1024 / 1024 / 1024, 1) -
        round(sum(a.sum1) / 1024 / 1024 / 1024, 1) used,
-       round(sum(a.sum1) / 1024 / 1024 / 1024, 1) free,
+       round(sum(a.sum1) / 1024 / 1024 / 1024, 1) "Available|(GB)",
        round(round(sum(a.sum1) / 1024 / 1024, 1) * 100 /
              round(sum(a.total1) / 1024 / 1024, 1),
              1) percent_free,
-       round(sum(a.maxb) / 1024 / 1024 / 1024, 1) max_frag,
-       max(a.cnt) fragments
+       round(sum(a.maxb) / 1024 / 1024 / 1024, 1) " Largest|Frag (GB) ",
+       max(a.cnt) " Free|Frags "
   from (select tablespace_name,
                0 total1,
                sum(bytes) sum1,
@@ -25,6 +26,7 @@ select substr(a.tablespace_name, 1, 20) tablespace,
           from dba_data_files
          group by tablespace_name) a
  group by a.tablespace_name;
+
 
 
 
