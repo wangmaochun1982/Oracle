@@ -8,6 +8,7 @@ ALTER TABLE "表名" DISABLE ROW MOVEMENT;--关闭行移动
 -- 分析表
 ANALYZE TABLE "表名" COMPUTE STATISTICS;
 
+
 ---------------------
 -- 分析索引碎片
 ANALYZE INDEX "表名索引名" VALIDATE STRUCTURE;
@@ -23,6 +24,14 @@ EXEC DBMS_STATS.GATHER_TABLE_STATS('实例名','表名',CASCADE=>TRUE);
 SELECT * FROM USER_TAB_MODIFICATIONS;
 
 
+-------------------
+dba_tables.BLOCKS Number of used data blocks in the table
+dba_tables.EMPTY_BLOCKS Number of empty (never used) data blocks in the table
+dba_segments.blocks Size, in Oracle blocks, of the segment
+dba_segments.blocks =dba_tables.BLOCKS +dba_tables.EMPTY_BLOCKS
+dba_segments.blocks 我常常用來查詢高水位大小 （表真正使用的大小+碎片大小'使用後釋放大小'）
+
+-----------
 SELECT TABLE_NAME,
        ROUND(BLOCKS * 8 / 1024, 2) "占用空间",
        ROUND(NUM_ROWS * AVG_ROW_LEN / 1024 / 1024, 2) "实际空间",
