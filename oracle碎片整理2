@@ -234,4 +234,18 @@ select distinct a.STATUS,
  通過上面的move操作。
 
 
+表級別碎片整理方法:
+1.首選shrink
+2.導入導出exp/imp expdp/impdp
+3.CATS
+4.table move tablespace
+5.Online Redefinition
+其中註意的是：
+1.Move會移動高水位，但不會釋放申請的空間，是在高水位以下(below HWM)的操作，同時分區表的全局索引需要重建，且有分區字段的組合索引也要刪除後重建（組合索引不能rebuild）；
+2.shrink space 同樣會移動高水位，但也會釋放申請的空間，是在高水位上下(below and above HWM)都有的操作，表段所在表空間的段空間管理(segment space management)必須為auto還要開啟行移動。
 
+3.導入導出對業務的影響程度較大，24*7的話比較難使用該方法；但是這個方法也有優點，就是表段沒有佔用那麼多數據文件時，導入表空間數據文件只會站表段的大小，我就是採取的這種方法縮小數據文件，而move,和shrink 並不能讓我resize數據文件，釋放磁盤空間。
+
+4.cast 只適合單個表，多表的話操作比較麻煩。
+
+5.在線重定義這個方法已經落後，不推薦了。
