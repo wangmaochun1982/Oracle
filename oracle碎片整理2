@@ -27,6 +27,211 @@ select substr(a.tablespace_name, 1, 20) tablespace,
          group by tablespace_name) a
  group by a.tablespace_name;
 
+--查看表空間計算FSFI（Free Space Fragmentation Index）值
+select a.tablespace_name,
+        sqrt ( max (a.blocks) /  sum (a.blocks)) * ( 100  /  sqrt ( sqrt ( count (a.blocks)))) FSFI
+   from dba_free_space a, dba_tablespaces b
+   where a.tablespace_name = b.tablespace_name
+  and b.contents not  in ( ' TEMPORARY ' , ' UNDO ' )
+  group  by a.tablespace_name
+  order  by FSFI;
+如果FSFI值< 30%，則該表空間的碎片較多（該數據庫每天都有定時任務收集統計信息，不會存在統計信息的偏差）；
+
+--檢查碎片最嚴重的前100張表，實際我只檢查了前20張表就夠了
+select *
+  from (select a.owner,
+               a.table_name,
+               a.num_rows,
+               a.avg_row_len * a.num_rows,
+               sum(b.bytes),
+               (a.avg_row_len * a.num_rows) / sum(b.bytes) frag
+          from dba_tables a, dba_segments b
+         where a.table_name = b.segment_name
+           and a.owner = b.owner
+           and a.owner not in (' SYS ',
+                               ' SYSTEM ',
+                               ' OUTLN ',
+                               ' DMSYS ',
+                               ' TSMSYS ',
+                               ' DBSNMP ',
+                               ' WMSYS ',
+                               ' EXFSYS ',
+                               ' CTXSYS ',
+                               ' XDB ',
+                               ' OLAPSYS ',
+                               ' ORDSYS ',
+                               ' MDSYS ',
+                               ' SYSMAN ')
+         group by a.owner, a.table_name, a.avg_row_len, a.num_rows
+        having a.avg_row_len * a.num_rows / sum(b.bytes) < 0.7
+         order by sum(b.bytes) desc)
+ where rownum <= 20;
+ 
+  --檢查Oracle在索引碎片
+   
+select id.tablespace_name,
+ id.owner,
+ id.index_name,
+ id.blevel,
+ sum (sg.bytes) /  1024  /  1024 ,
+ sg.blocks,
+ sg.extents
+ from dba_indexes id, dba_segments sg
+  where id.owner = sg.owner
+  and id.index_name = sg.segment_name
+  and id.tablespace_name = sg.tablespace_name
+  and id.owner not  in 
+ ( ' SYS ' , ' SYSTEM ' , ' USER ' , ' DBSNMP ' , ' ORDSYS ' , ' OUTLN ' )
+  and sg.extents >  100
+ and id.blevel >=  3 
+ group  by id.tablespace_name,
+ id.owner,
+ id.index_name,
+ id.blevel,
+ sg.blocks,
+ sg.extents
+having  sum (sg.bytes) /  1024  /  1024  >  100 ;
+
+###################3碎片處理方式
+1.shrink方式
+alter table <表名> enable row movement;
+alter table <表名> shrink space compact; --- 只壓縮數據不下調HWM
+alter table <表名> shrink space; --- 下調HWM;
+
+alter table <表名> shrink space cascade; --- 壓縮表及相關數據段並下調HWM
+alter table <表名> disable row movement;
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+select *
+  from (select a.table_name,
+               'alter table ' || a.table_name || ' enable row movement ; ',
+               'alter table ' || a.table_name || ' shrink space compact ; ',
+               'alter table ' || a.table_name || ' shrink space cascade ; ',
+               'alter table ' || a.table_name || ' disable row movement ;',
+               a.num_rows,
+               a.avg_row_len * a.num_rows,
+               round(sum(b.bytes / 1024 / 1024 / 1024), 2) G,
+               (a.avg_row_len * a.num_rows) / sum(b.bytes) frag
+          from dba_tables a, dba_segments b
+         where a.table_name = b.segment_name
+           and a.owner = b.owner
+           and a.owner not in ('SYS',
+                               'SYSTEM',
+                               'OUTLN',
+                               'DMSYS',
+                               'TSMSYS',
+                               'DBSNMP',
+                               'WMSYS',
+                               'EXFSYS',
+                               'CTXSYS',
+                               'XDB',
+                               'OLAPSYS',
+                               'ORDSYS',
+                               'MDSYS',
+                               'SYSMAN')
+         group by a.owner, a.table_name, a.avg_row_len, a.num_rows
+        having a.avg_row_len * a.num_rows / sum(b.bytes) < 0.7
+         order by round(sum(b.bytes / 1024 / 1024 / 1024), 2) desc)
+ where rownum <= 20;
+進行shrink之後，進行數據文件的收縮如下。
+
+ 執行後進行數據文件的收縮：
+  SELECT a.tablespace_name,
+       ' alter database datafile ''' || a. file_name || ''' resize ' || round(ceil(b.resize_to / 1024 / 1024 / 1024), 2) || ' G; ' AS "resize_SQL",
+       round(a.bytes / 1024 / 1024 / 1024, 2) AS "current_bytes(GB)",
+       round(a.bytes / 1024 / 1024 / 1024 -
+             b.resize_to / 1024 / 1024 / 1024,
+             2) AS "shrink_by_bytes(GB)",
+       round(ceil(b.resize_to / 1024 / 1024 / 1024), 2) AS "resize_to_bytes(GB)"
+  FROM dba_data_files a,
+       (SELECT file_id,
+               MAX((block_id + blocks - 1) *
+                   (select value
+                      from v$parameter
+                     where name = 'db_block_size')) AS resize_to
+          FROM dba_extents
+         GROUP by file_id) b
+ WHERE a. file_id = b. file_id
+ ORDER BY a.tablespace_name, a.file_name;
+  可以看到數據文件還是下不去，微乎其微的影響，後面就嘗試了move 操作。
+
+2.2 進行move到新的表空間操作（全局索引會失效）
+  create tablespace defrag datafile 'F:\APP\ADMINISTRATOR\ORADATA\TTFC\defrag.DBF' size 5g autoextend on next 256m;
+   
+select b.owner, b.segment_name, ROUND(sum(bytes / 1024 / 1024 / 1024), 2) G
+  from dba_segments b
+ where segment_type like 'TABLE%' having
+ sum(b.BYTES / 1024 / 1024 / 1024) >= 1
+ group by b.owner, b.segment_name;
+ 
+ 
+ #########产生ALTER TABLE MOVE
+ with d as
+ (select b.owner, b.segment_name
+    from dba_segments b
+   where b.segment_type like 'TABLE%' having
+   sum(b.BYTES / 1024 / 1024 / 1024) >= 1
+   group by b.owner, b.segment_name)
+select a.segment_name,
+       a.owner,
+       a.segment_type,
+       case
+         when a.segment_type = 'TABLE' then
+          ' alter table ' || a.owner || ' . ' || a.segment_name ||
+          ' move tablespace defrag; '
+         when segment_type = 'TABLE PARTITION' then
+          ' alter table ' || a.owner || ' . ' || a.segment_name ||
+          ' move partition ' || a.PARTITION_NAME || ' tablespace defrag; '
+         when segment_type = 'TABLE SUBPARTITION' then
+          ' alter table ' || a.owner || ' . ' || a.segment_name ||
+          ' move subpartition ' || a.PARTITION_NAME ||
+          ' tablespace defrag; '
+       end as sqltext
+  from dba_segments a
+ inner join d
+    on a.segment_name = d.segment_name
+   and a.owner = d.owner
+ where a.segment_type like 'TABLE%';
+
+sys用戶開頭的表後面解決，非SYS得先move，move到tbs_move 表空間。
+
+--所有非分區和全局索引重建
+select a.status,
+       ' alter index ' || A.owner || ' . ' || a.index_name ||
+       ' rebuild tablespace defrag online nologging ; ' AS REBUILD_SQL
+  from dba_indexes a
+ WHERE
+-- a.STATUS = 'UNUSABLE' and 
+ a.PARTITIONED = 'NO' 
+ AND A.OWNER = 'EMESP'
+ 
+ --一級主分區索引重建
+select  distinct  ' alter index '  || A.INDEX_OWNER ||  ' . '  || a.index_name || 
+                ' rebuild PARTITION '  || a.partition_name || 
+                ' tablespace TBS_MOVE online nologging; ' 
+  from dba_ind_partitions a
+  INNER  JOIN dba_part_indexes t
+     ON T.owner = A.INDEX_OWNER
+    AND a.index_name = T.index_name
+  where 
+-- a.STATUS ='UNUSABLE' and
+ INDEX_OWNER =  'EMESP' 
+ and T.SUBPARTITIONING_TYPE = 'NONE' 
+ 
+ --二級分區索引重建
+select distinct a.STATUS,
+                'alter index ' || A.INDEX_OWNER || '.' || a.index_name ||
+                ' rebuild SUBPARTITION ' || a.subpartition_name ||
+                ' tablespace TBS_MOVE online nologging;'
+  from dba_ind_subpartitions a
+ INNER JOIN dba_part_indexes t
+    ON T.owner = A.INDEX_OWNER
+   AND a.index_name = T.index_name
+ where -- a.STATUS ='UNUSABLE' and 
+ INDEX_OWNER = 'EMESP'
+ AND T.SUBPARTITIONING_TYPE <> 'NONE'
+注意，分區字段的組合索引需要重新刪除重建，不能rebuild。
+
+ 通過上面的move操作。
 
 
 
