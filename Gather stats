@@ -12,7 +12,9 @@ select table_name, last_analyzed from dba_tables where owner='SCOTT'  AND TABLE_
 col table_name for a10
 col partition_name for a10
 SELECT table_name, partition_name,to_char(last_analyzed,'DD-MON-YYYY HH24:MI:SS') "LASTANALYZED" FROM DBA_TAB_PARTITIONS WHERE table_name='TEST' AND partition_name like 'TEST2020%' order by partition_name;
-Gather Stats for Schema
+
+#########################Gather Stats for Schema################################
+
 
 ---One Way
 Begin
@@ -30,7 +32,8 @@ EXEC DBMS_STATS.gather_schema_stats (ownname => 'SCOTT', cascade =>true, estimat
 
 --Simple way
 exec dbms_stats.gather_schema_stats( ownname => 'SCOTT',degree => 8);
-Gather Stats for Table
+
+#################################Gather Stats for Table########################################
 
 -- One Way
 BEGIN
@@ -51,7 +54,8 @@ execute dbms_stats.gather_table_stats(ownname => 'SCOTT', tabname =>'TEST', esti
 
 --Simple way
 exec dbms_stats.gather_table_stats('SCOTT','TEST');
-Gather Stats for Partitions
+
+#####################################Gather Stats for Partitions###############################################3
 
 --One Way
 BEGIN
