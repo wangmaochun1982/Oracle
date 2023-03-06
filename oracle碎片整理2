@@ -307,13 +307,17 @@ having sum(bytes) > 65536
  
  
  ##################gather table statics######################
- 
  select 'begin' || chr(13) || 'DBMS_STATS.gather_table_stats(''' || owner ||
        ''',''' || segment_name || ''', cascade => TRUE);' || chr(13) || '
            end;' || chr(13) || '/' || chr(13)
   from dba_segments T
  where T.segment_name LIKE 'TH%'
-   AND T.segment_type = 'TABLE PARTITION'
+   AND T.segment_type = 'TABLE'
  group by owner, segment_name, PARTITION_NAME, tablespace_name
 having sum(bytes) > 65536
  order by owner, segment_name, PARTITION_NAME;
+  ##################gather partition statics######################
+  
+  
+  
+ 
