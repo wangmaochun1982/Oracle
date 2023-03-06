@@ -75,4 +75,4 @@ execute dbms_stats.gather_table_stats(ownname => 'SCOTT', tabname =>'TEST', esti
 
 --Simple Way
 
-execute dbms_stats.gather_table_stats(ownname => 'SCOTT', tabname =>'TEST', Partname='TEST202103'
+execute dbms_stats.gather_table_stats(ownname => 'SCOTT', tabname =>'TEST', Partname='TEST202103');
