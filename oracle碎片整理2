@@ -318,6 +318,11 @@ having sum(bytes) > 65536
  order by owner, segment_name, PARTITION_NAME;
   ##################gather partition statics######################
   
-  
+  select 'begin' || chr(13) || 'DBMS_STATS.gather_table_stats(''' ||
+       TABLE_OWNER || ''',''' || TABLE_NAME || ''', Partname=''' ||
+       t.PARTITION_NAME || ''', cascade => TRUE);' || chr(13) || '
+           end;' || chr(13) || '/' || chr(13)
+  from ALL_TAB_PARTITIONS t
+ where t.table_name like 'TH%'
   
  
