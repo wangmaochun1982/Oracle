@@ -279,7 +279,24 @@ SELECT 'alter table ' || owner || '.' || table_name ||
    AND T.segment_type = 'TABLE PARTITION'
  group by owner, segment_name, PARTITION_NAME, tablespace_name
 having sum(bytes) > 65536
- order by owner, segment_name, PARTITION_NAME
+ order by owner, segment_name, PARTITION_NAME;
+ 
+ select 'alter table ' || OWNER || '.' || segment_name ||
+                  ' MODIFY PARTITION ' || partition_name || ' PCTFREE 0;' ||
+                  chr(13) || 'alter table ' || OWNER || '.' || segment_name ||
+                  ' move partition ' || PARTITION_NAME ||
+                  ' tablespace defrag;' || chr(13) || 'alter table  ' ||
+                  OWNER || '.' || segment_name || '  move partition ' ||
+                  PARTITION_NAME || ' STORAGE(initial 64k) tablespace ' || T.tablespace_name || ';'
+             from dba_segments T
+            where T.segment_name LIKE 'TH%'
+              AND T.segment_type = 'TABLE PARTITION'
+            group by owner, segment_name, PARTITION_NAME, tablespace_name
+           having sum(bytes) > 65536
+            order by owner, segment_name, PARTITION_NAME;
+            
+            
+            
 
 
  select 'alter index '||b.INDEX_OWNER||'.'||b.INDEX_NAME||' rebuild partition '||b.PARTITION_NAME||'   online;' 
