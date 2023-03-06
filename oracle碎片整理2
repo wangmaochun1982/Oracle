@@ -268,5 +268,23 @@ SELECT 'alter table ' || owner || '.' || table_name ||
  WHERE T.table_name LIKE 'TH%'  and t.partitioned='NO'   )
  
  
+ 2.PARTITION  MOVE
+ 
+ select 'alter table ' || OWNER || '.' || segment_name || ' move partition ' ||
+       PARTITION_NAME || ' tablespace defrag;' || chr(13) ||
+       'alter table  ' || OWNER || '.' || segment_name ||
+       '  move partition ' || PARTITION_NAME || ' tablespace '||T.tablespace_name||';'
+  from dba_segments T
+ where T.segment_name LIKE 'TH%'
+   AND T.segment_type = 'TABLE PARTITION'
+ group by owner, segment_name, PARTITION_NAME, tablespace_name
+having sum(bytes) > 65536
+ order by owner, segment_name, PARTITION_NAME
+
+
+ select 'alter index '||b.INDEX_OWNER||'.'||b.INDEX_NAME||' rebuild partition '||b.PARTITION_NAME||'   online;' 
+      from ALL_TAB_PARTITIONS a,all_ind_partitions b
+     where a.table_name like 'TH%'
+       and a.PARTITION_NAME = b.PARTITION_NAME
  
  
