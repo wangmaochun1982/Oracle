@@ -1,0 +1,74 @@
+Gather stats for schema, table, partition in Oracle
+Leave a reply
+Check Stats for Schema, table, Partition
+
+--Check for Schema
+select owner, min(last_Analyzed), max(last_analyzed) from dba_tables where owner = 'SCOTT' group by owner order by 1;
+
+--Check for table stats
+select table_name, last_analyzed from dba_tables where owner='SCOTT'  AND TABLE_NAME IN ('TEST');
+
+--Check for partition stats
+col table_name for a10
+col partition_name for a10
+SELECT table_name, partition_name,to_char(last_analyzed,'DD-MON-YYYY HH24:MI:SS') "LASTANALYZED" FROM DBA_TAB_PARTITIONS WHERE table_name='TEST' AND partition_name like 'TEST2020%' order by partition_name;
+Gather Stats for Schema
+
+---One Way
+Begin
+dbms_stats.gather_schema_stats(
+ownname => 'SCOTT', --- schema name
+options => 'GATHER AUTO',
+estimate_percent => dbms_stats.auto_sample_size,
+method_opt => 'for all columns size repeat',
+degree => 24
+);
+/
+
+--Second Way
+EXEC DBMS_STATS.gather_schema_stats (ownname => 'SCOTT', cascade =>true, estimate_percent => DBMS_STATS.AUTO_SAMPLE_SIZE, degree => '8',method_opt => 'FOR ALL COLUMNS SIZE AUTO', force=>TRUE );
+
+--Simple way
+exec dbms_stats.gather_schema_stats( ownname => 'SCOTT',degree => 8);
+Gather Stats for Table
+
+-- One Way
+BEGIN
+DBMS_STATS.GATHER_TABLE_STATS (
+ownname => 'SCOTT',
+tabname => 'TEST',
+cascade => true, ---- For collecting stats for respective indexes
+method_opt=>'for all indexed columns size 1',  -- if no histogram for index
+granularity => 'ALL',
+estimate_percent =>dbms_stats.auto_sample_size,
+degree => 8);
+END;
+/
+
+--Second Way
+
+execute dbms_stats.gather_table_stats(ownname => 'SCOTT', tabname =>'TEST', estimate_percent => DBMS_STATS.AUTO_SAMPLE_SIZE, degree=> 4, method_opt => 'FOR ALL COLUMNS SIZE AUTO', cascade => TRUE);
+
+--Simple way
+exec dbms_stats.gather_table_stats('SCOTT','TEST');
+Gather Stats for Partitions
+
+--One Way
+BEGIN
+DBMS_STATS.GATHER_TABLE_STATS (
+ownname => 'SCOTT',
+tabname => 'TEST', --- TABLE NAME
+partname => 'TEST_JAN2016' --- PARTITOIN NAME
+method_opt=>'for all indexed columns size 1',
+GRANULARITY => 'APPROX_GLOBAL AND PARTITION',
+degree => 8);
+END;
+/
+
+--Second Way
+
+execute dbms_stats.gather_table_stats(ownname => 'SCOTT', tabname =>'TEST', estimate_percent => DBMS_STATS.AUTO_SAMPLE_SIZE, degree=> 4,partname='TEST201901' ,method_opt => 'FOR ALL COLUMNS SIZE AUTO', cascade => TRUE);
+
+--Simple Way
+
+execute dbms_stats.gather_table_stats(ownname => 'SCOTT', tabname =>'TEST', Partname='TEST202103'
