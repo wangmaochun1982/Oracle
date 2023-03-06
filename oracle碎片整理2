@@ -249,3 +249,24 @@ select distinct a.STATUS,
 4.cast 只適合單個表，多表的話操作比較麻煩。
 
 5.在線重定義這個方法已經落後，不推薦了。
+
+
+###################################################################
+1.非partition,table move and compress
+
+SELECT 'alter table ' || owner || '.' || table_name ||
+       ' nologging PARALLEL 4 compress FOR OLTP pctfree 0;' || chr(13) ||
+       'alter table  ' || owner || '.' || table_name ||
+       ' move tablespace defrag;' || chr(13) || 'alter table ' || owner || '.' ||
+       table_name || ' move STORAGE(initial 64k) tablespace '||t.tablespace_name||';'
+  FROM DBA_TABLES T
+ WHERE T.table_name LIKE 'TH%' and t.partitioned='NO' 
+ 
+ select 'alter index '||OWNER||'.'||INDEX_NAME||' rebuild pctfree 0 online;'from dba_indexes
+     where table_name in (SELECT table_name
+  FROM DBA_TABLES T
+ WHERE T.table_name LIKE 'TH%'  and t.partitioned='NO'   )
+ 
+ 
+ 
+ 
