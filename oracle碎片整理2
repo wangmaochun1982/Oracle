@@ -308,7 +308,10 @@ having sum(bytes) > 65536
             group by owner, segment_name, PARTITION_NAME, tablespace_name
            having sum(bytes) > 65536
             order by owner, segment_name, PARTITION_NAME;          
-            
+    ~~~~~~~~~~~·如果有bitmap index 可以先失效索引，Move后再启用~~~~~~~~~~~~~~
+    select 'ALTER INDEX EMESP.'||INDEX_NAME||' UNUSABLE;' from dba_indexes t where t.table_name LIKE 'TH%' and index_type='BITMAP';
+        select 'ALTER INDEX EMESP.'||INDEX_NAME||' rebuild;' from dba_indexes t where t.table_name LIKE 'TH%' and index_type='BITMAP';
+    
 
 
  select 'alter index '||b.INDEX_OWNER||'.'||b.INDEX_NAME||' rebuild partition '||b.PARTITION_NAME||'   online;' 
