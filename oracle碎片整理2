@@ -294,8 +294,20 @@ having sum(bytes) > 65536
             group by owner, segment_name, PARTITION_NAME, tablespace_name
            having sum(bytes) > 65536
             order by owner, segment_name, PARTITION_NAME;
-            
-            
+ ~~~~~~~~~~~~~~~~~~~COMPRESS~~~~~~~~~~~~~~~~~`           
+  select 'alter table ' || OWNER || '.' || segment_name ||
+                  ' MODIFY PARTITION ' || partition_name || ' COMPRESS FOR OLTP PCTFREE 0;' ||
+                  chr(13) || 'alter table ' || OWNER || '.' || segment_name ||
+                  ' move partition ' || PARTITION_NAME ||
+                  ' tablespace defrag;' || chr(13) || 'alter table  ' ||
+                  OWNER || '.' || segment_name || '  move partition ' ||
+                  PARTITION_NAME || ' STORAGE(initial 64k) tablespace ' || T.tablespace_name || ';'
+             from dba_segments T
+            where T.segment_name LIKE 'TH%'
+              AND T.segment_type = 'TABLE PARTITION'
+            group by owner, segment_name, PARTITION_NAME, tablespace_name
+           having sum(bytes) > 65536
+            order by owner, segment_name, PARTITION_NAME;          
             
 
 
