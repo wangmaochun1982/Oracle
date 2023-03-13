@@ -3,7 +3,10 @@ Oracle 存储管理
     段 -- 文件            （DB）
 物理存储
 	管理存储设备 -- 文件  （ASM）
-	
+大段应该有大尺寸的extent，小段应该有尺寸的extent。
+通过这种方式，应该有可能避免碎片和过多的extent。
+为此，extent的大小被规范化为有限的几个尺寸：64KB、1MB、8MB或64MB。
+
 select * from dba_data_files;
 select * from dba_tablespaces;
 select * from dba_segments;
