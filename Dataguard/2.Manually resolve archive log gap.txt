@@ -1,0 +1,43 @@
+###############Manually resolve archive log gap/ Recover Standby / Manual Standby recovery###############
+
+ ~~~~~~~~~~~~~~~~~on the STANDBY database~~~~~~~~~~
+Identify the missing log sequence numbers by running this SQL:
+
+SQL> select thread#, low_sequence#, high_sequence#  from v$archive_gap;
+
+
+~~~~~~~~~~~~~~~~~~on the PRIMARY database~~~~~~~~~~~~~~
+Identify the filenames of the missing logs by running this SQL :
+
+SQL>SELECT   NAME
+FROM   V$ARCHIVED_LOG
+WHERE   DEST_ID = 1 AND SEQUENCE# BETWEEN &Low_Sequence AND &High_Sequence;
+
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+1. Cancel managed recovery in the STANDBY database
+
+SQL> ALTER DATABASE RECOVER MANAGED STANDBY DATABASE CANCEL;
+
+2. Copy the missing archive redo logs from primary to standby server.
+
+We assume here that the redo files are going to the same location on the standby server.
+
+3. Recover the STANDBY database
+
+SQL> RECOVER AUTOMATIC STANDBY DATABASE;
+
+When all logs have been applied Oracle will ask for the next, as yet unarchived, redo log. At this point cancel the recovery, e.g.
+Specify log: {<RET>=suggested | filename | AUTO | CANCEL}
+CANCEL
+
+4. Put the STANDBY database back into managed recovery mode:
+
+SQL> ALTER DATABASE RECOVER MANAGED STANDBY DATABASE DISCONNECT;
+
+~~~~~~~~~~~~~~~~ on the STANDBY database~~~~~~~~~~~~~~~~
+5. Check that the archive redo gaps have been resolved byt running thie SQL:
+
+SQL> select thread#, low_sequence#, high_sequence# from v$archive_gap;
+
+
