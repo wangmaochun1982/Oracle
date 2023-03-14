@@ -1,0 +1,3 @@
+1.LAG的理解：
+         LAG代表事務被寫入到磁盤介質中的時刻例如Oracle中redo被寫入到online redo logfile中和Replicat將同一個事務分發到目標數據庫的時刻之間的時間間隔。
+         通俗地說，一個事務內的所有行記錄將對應同一個LAG；
