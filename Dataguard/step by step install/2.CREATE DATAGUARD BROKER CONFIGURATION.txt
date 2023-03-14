@@ -1,0 +1,172 @@
+~~~~~~~~~~~~~~~~~~~~CREATE DATAGUARD BROKER CONFIGURATION~~~~~~~~~~~~~~~~~~~~~~`
+
+###PRIMARY DATABASE
+
+###SET DG_BROKER_START AS FALSE
+
+[oracle@node1 ~]$ sqlplus sys/welcome1234@PRIMARY_CDBTEST as sysdba
+
+SQL> show parameter dg_broker;
+
+SQL> alter system set dg_broker_start=false scope=both;
+
+###CREATE DIRECTORIES FOR DATAGUARD BROKER ON ASM
+
+[root@node1 ~]# su – grid
+
+[grid@node1 ~]$ asmcmd
+
+ASMCMD> mkdir +DATA/CDBTEST/DATAGUARDCONFIG
+ASMCMD>
+ASMCMD> mkdir +FRA/CDBTEST/DATAGUARDCONFIG
+
+#SET CONFIG FILE PARAMETERS
+
+SQL> ALTER SYSTEM SET DG_BROKER_CONFIG_FILE1=’+DATA/CDBTEST/DATAGUARDCONFIG/dgb_config01.ora’ SCOPE=BOTH sid=’*’;
+
+System altered.
+
+SQL> ALTER SYSTEM SET DG_BROKER_CONFIG_FILE2=’+FRA/CDBTEST/DATAGUARDCONFIG/dgb_config02.ora’ SCOPE=BOTH sid=’*’;
+
+System altered.
+
+SQL> show parameter dg_broker;
+
+####SET DG_BROKER_START AS TRUE
+
+SQL> alter system set dg_broker_start=true scope=both;
+
+~~~~~~~~~~~~~~PHYSICAL STANDBY DATABASE
+
+[oracle@node1 ~]$ export ORACLE_SID=CDBTESTDG
+[oracle@node1 ~]$ export ORACLE_BASE=/u01/app/oracle/database/19.3.0/
+[oracle@node1 ~]$ export ORACLE_HOME=/u01/app/oracle/database/19.3.0/dbhome_1
+[oracle@node1 ~]$ sqlplus / as sysdba
+
+SQL> show parameter dg_broker;
+
+SQL> alter system set dg_broker_start=false scope=both;
+
+SQL> show parameter dg_broker;
+
+NAME                                 TYPE        VALUE
+------------------------------------ ----------- ------------------------------
+dg_broker_config_file1               string      /u01/app/oracle/database/19.3.
+                                                 0/dbhome_1/dbs/dr1CDBTESTDG.da
+                                                 t
+dg_broker_config_file2               string      /u01/app/oracle/database/19.3.
+                                                 0/dbhome_1/dbs/dr2CDBTESTDG.da
+                                                 t
+dg_broker_start                      boolean     FALSE
+
+###CREATE DIRECTORIES FOR DATAGUARD BROKER ON ASM
+
+[root@node1 ~]# su – grid
+
+[grid@node1 ~]$ asmcmd
+ASMCMD>
+ASMCMD> mkdir +DATA/CDBTESTDG/DATAGUARDCONFIG
+ASMCMD>
+ASMCMD> mkdir +FRA/CDBTESTDG/DATAGUARDCONFIG
+
+###SET CONFIG FILE PARAMETERS
+
+SQL> ALTER SYSTEM SET DG_BROKER_CONFIG_FILE1=’+DATA/CDBTESTDG/DATAGUARDCONFIG/dgb_config01.ora’ SCOPE=BOTH sid=’*’;
+
+System altered.
+
+SQL> ALTER SYSTEM SET DG_BROKER_CONFIG_FILE2=’+FRA/CDBTESTDG/DATAGUARDCONFIG/dgb_config02.ora’ SCOPE=BOTH sid=’*’;
+
+System altered.
+
+SQL> show parameter dg_broker;
+
+###SET DG_BROKER_START AS TRUE
+
+SQL> alter system set dg_broker_start=true scope=both;
+
+System altered.
+
+SQL> show parameter dg_broker;
+
+~~~~~~~~~~~~~~~~~~~~~~CREATE CONFIGURATION FOR DATAGUARD BROKER USING DGMGRL ON PRIMARY~~~~~~~~~~~~~~~~~~~
+
+[oracle@node1 ~]$ dgmgrl
+
+DGMGRL> connect sys/welcome1234@PRIMARY_CDBTEST;
+
+DGMGRL> remove configuration;
+
+DGMGRL> show configuration;
+
+DGMGRL> add database CDBTESTDG as connect identifier is STANDBY_CDBTEST maintained as physical;
+Database “cdbtestdg” added
+
+DGMGRL> show configuration;
+
+DGMGRL> enable configuration;
+
+DGMGRL> show configuration;
+
+！！！PERFORMING SWITCHOVER ACTIVITY FROM PRIMARY DATABASE TO PHYSICAL STANDBY DATABASE USING DGMGRL PROMPT. 
+      LOGIN TO PRIMARY DATABASE AND CHECK THE VALIDITY OF THE CDBTEST AND CDBTESTDG INSTANCES FOR SWITCHOVER ACTIVITY.
+
+[oracle@node1 ~]$ dgmgrl
+
+DGMGRL> connect sys/welcome1234@PRIMARY_CDBTEST;
+
+DGMGRL> show configuration;
+
+DGMGRL> validate database cdbtest;
+
+DGMGRL> validate database cdbtestdg;
+
+####PERFORMING SWITCHOVER FROM CDBTEST TO CDBTESTDG
+
+DGMGRL> switchover to CDBTESTDG;
+
+##LOGIN TO NEW PRIMARY DATABASE (CDBTESTDG) AND CHECK THE CONFIGURATION STATUS FROM DGMGRL PROMPT.
+
+[oracle@node1 ~]$ export ORACLE_SID=CDBTESTDG
+[oracle@node1 ~]$ export ORACLE_BASE=/u01/app/oracle/database/19.3.0/
+[oracle@node1 ~]$ export ORACLE_HOME=/u01/app/oracle/database/19.3.0/dbhome_1
+[oracle@node1 ~]$
+[oracle@node1 ~]$ dgmgrl
+
+DGMGRL> connect sys/welcome1234@STANDBY_CDBTEST;
+
+DGMGRL> show configuration;
+
+！！！PERFORM SWITCHOVER ACTIVITY FROM NEW PRIMARY DATABASE (CDBTESTDG) TO NEW PHYSICAL STANDBY DATABASE (CDBTEST) BEFORE THAT CHECK THE VALIDITY OF THE CDBTESTDG AND CDBTEST INSTANCES FOR SWITCHOVER ACTIVITY.
+
+[oracle@node1 ~]$ export ORACLE_SID=CDBTESTDG
+[oracle@node1 ~]$ export ORACLE_BASE=/u01/app/oracle/database/19.3.0/
+[oracle@node1 ~]$ export ORACLE_HOME=/u01/app/oracle/database/19.3.0/dbhome_1
+[oracle@node1 ~]$
+[oracle@node1 ~]$ dgmgrl
+
+DGMGRL> connect sys/welcome1234@STANDBY_CDBTEST;
+Connected to “CDBTESTDG”
+Connected as SYSDBA.
+DGMGRL>
+DGMGRL> show configuration;
+
+DGMGRL> validate database cdbtestdg;
+
+DGMGRL> validate database cdbtest;
+
+#######IN ORDER TO GET RID OF ABOVE ERROR######33
+
+DGMGRL> edit database ‘CDBTESTDG’ set property StaticConnectIdentifier='(DESCRIPTION=(ADDRESS=(PROTOCOL=tcp)(HOST=node1-vip)(PORT=1580))(CONNECT_DATA=(SERVICE_NAME=CDBTESTDG)(INSTANCE_NAME=CDBTESTDG)(SERVER=DEDICATED)))’;
+Property “staticconnectidentifier” updated
+
+DGMGRL> validate database CDBTESTDG;
+
+DGMGRL> validate database CDBTEST;
+
+DGMGRL> switchover to CDBTEST;
+
+DGMGRL> show configuration;
+
+
+

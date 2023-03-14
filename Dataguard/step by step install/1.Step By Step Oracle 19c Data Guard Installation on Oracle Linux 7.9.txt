@@ -1,0 +1,404 @@
+Step By Step Oracle 19c Data Guard Installation on Oracle Linux 7.9
+
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~PRIMARY SIDE NODE-1~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+1.LISTENER  and  TNSNAMES
+#ADD NEW LISTENERS FOR DATA GUARD CONNECTION
+
+[root@node1 ~]# su – oracle
+[oracle@node1 ~]$ cd $ORACLE_HOME/network/admin
+[oracle@node1 admin]$ vi listener.ora
+
+#ADD BELOW ENTRIES TO THE END OF FILE.
+
+# NODE1 PRIMARY DATABASE DATAGUARD LISTENER
+LISTENER_FOR_PRIMARY_DATAGUARD=(ADDRESS_LIST=(ADDRESS=(PROTOCOL=TCP)(Host=node1-vip)(Port=1570)))
+SID_LIST_LISTENER_FOR_PRIMARY_DATAGUARD=(SID_LIST=(SID_DESC=(SID_NAME=CDBTEST1)(ORACLE_HOME=/u01/app/oracle/database/19.3.0/dbhome_1)))
+
+# NODE1 STANDBY DATABASE DATAGUARD LISTENER
+LISTENER_FOR_STANDBY_DATAGUARD=(ADDRESS_LIST=(ADDRESS=(PROTOCOL=TCP)(Host=node1-vip)(Port=1580)))
+SID_LIST_LISTENER_FOR_STANDBY_DATAGUARD=(SID_LIST=(SID_DESC=(SID_NAME=CDBTESTDG)(ORACLE_HOME=/u01/app/oracle/database/19.3.0/dbhome_1)))
+
+
+#START LISTENERS
+
+#START PRIMARY DATABASE DATAGUARD LISTENER
+
+[oracle@node1 admin]$ lsnrctl start LISTENER_FOR_PRIMARY_DATAGUARD
+
+#START STANDBY DATABASE DATAGUARD LISTENER
+
+[oracle@node1 admin]$ lsnrctl start LISTENER_FOR_STANDBY_DATAGUARD
+
+#CONFIGURE TNSNAMES.ORA FOR DATA GUARD CONNECTION
+
+[oracle@node1 admin]$ vi tnsnames.ora
+
+#ADD BELOW ENTRIES TO THE END OF FILE
+PRIMARY_CDBTEST =
+(DESCRIPTION =
+(ADDRESS = (PROTOCOL = TCP)(HOST = node1-vip)(PORT = 1570))
+(CONNECT_DATA =
+(SERVER = DEDICATED)
+(SERVICE_NAME = CDBTEST1)
+)
+)
+
+STANDBY_CDBTEST =
+(DESCRIPTION =
+(ADDRESS = (PROTOCOL = TCP)(HOST = node1-vip)(PORT = 1580))
+(CONNECT_DATA =
+(SERVER = DEDICATED)
+(SERVICE_NAME = CDBTESTDG)
+)
+)
+
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~PRIMARY SIDE NODE-2~~~~~~~~~~~~~~~~~~~~~~~~~~~~`
+[root@node2 ~]# su – oracle 
+[oracle@node2 ~]$
+[oracle@node2 ~]$ cd $ORACLE_HOME/network/admin
+[oracle@node2 admin]$
+[oracle@node2 admin]$ vi listener.ora
+
+
+#ADD BELOW ENTRIES TO THE END OF FILE
+
+# NODE2 PRIMARY DATABASE DATAGUARD LISTENER
+LISTENER_FOR_PRIMARY_DATAGUARD=(ADDRESS_LIST=(ADDRESS=(PROTOCOL=TCP)(Host=node2-vip)(Port=1570)))
+SID_LIST_LISTENER_FOR_PRIMARY_DATAGUARD=(SID_LIST=(SID_DESC=(SID_NAME=CDBTEST2)(ORACLE_HOME=/u01/app/oracle/database/19.3.0/dbhome_1)))
+
+#START PRIMARY DATABASE DATAGUARD LISTENER
+
+[oracle@node2 admin]$ lsnrctl start LISTENER_FOR_PRIMARY_DATAGUARD
+
+#CONFIGURE TNSNAMES.ORA FOR DATA GUARD CONNECTION
+
+[root@node2 ~]# su – oracle 
+[oracle@node2 ~]$ cd $ORACLE_HOME/network/admin 
+[oracle@node2 admin]$ vi tnsnames.ora
+
+#ADD BELOW ENTRIES TO THE END OF FILE
+
+PRIMARY_CDBTEST =
+(DESCRIPTION =
+(ADDRESS = (PROTOCOL = TCP)(HOST = node2-vip)(PORT = 1570))
+(CONNECT_DATA =
+(SERVER = DEDICATED)
+(SERVICE_NAME = CDBTEST2)
+)
+)
+
+STANDBY_CDBTEST =
+(DESCRIPTION =
+(ADDRESS = (PROTOCOL = TCP)(HOST = node1-vip)(PORT = 1580))
+(CONNECT_DATA =
+(SERVER = DEDICATED)
+(SERVICE_NAME = CDBTESTDG)
+)
+)
+
+~~~~~~~~~~~~~~~~~CONFIGURE PARAMETERS ON PRIMARY SIDE~~~~~~~~~~~~`
+
+[oracle@node1 ~]$ sqlplus sys/welcome1234@CDBTEST as sysdba
+
+SQL> select log_mode from gv$database;
+
+SQL> alter database force logging;
+
+SQL> alter system set db_file_name_convert='+DATA/CDBTESTDG/DATAFILE','+DATA/CDBTEST/DATAFILE','+FRA/CDBTESTDG/DATAFILE','+FRA/CDBTEST/DATAFILE' scope=spfile;
+
+SQL> alter system set log_file_name_convert='+DATA/CDBTESTDG/ONLINELOG','+DATA/CDBTEST/ONLINELOG','+FRA/CDBTESTDG/ONLINELOG','+FRA/CDBTEST/ONLINELOG' scope=spfile;
+
+SQL> alter system set log_archive_config='DG_CONFIG=(CDBTEST,CDBTESTDG)';
+
+SQL> alter system set log_archive_dest_1='LOCATION=USE_DB_RECOVERY_FILE_DEST VALID_FOR=(ALL_LOGFILES,ALL_ROLES) DB_UNIQUE_NAME=CDBTEST';
+
+SQL> alter system set log_archive_dest_2='SERVICE=STANDBY_CDBTEST VALID_FOR=(ONLINE_LOGFILES,PRIMARY_ROLE) DB_UNIQUE_NAME=CDBTESTDG';
+
+SQL> alter system set log_archive_dest_state_2='ENABLE';
+
+SQL> alter system set log_archive_format='%t_%s_%r.arc' scope=spfile;
+
+SQL> alter system set fal_client='PRIMARY_CDBTEST';
+
+SQL> alter system set fal_server='STANDBY_CDBTEST';
+
+SQL> alter system set standby_file_management='AUTO';
+
+
+SQL> alter system set remote_login_passwordfile='exclusive' scope=spfile;
+
+
+SQL> alter database flashback on;
+
+#Create standby redo logs on the RAC primary database to support the standby role. 
+ 
+#CHECK ONLINE REDO LOGS
+
+SQL> select group#,thread#,bytes from v$log;
+
+#CHECK STANDBY REDO LOGS
+
+SQL> select group#,thread#,bytes from v$standby_log;
+
+#ADD STANDBY REDO LOGS
+
+ALTER DATABASE ADD STANDBY LOGFILE THREAD 1 (‘+FRA') SIZE 200M;
+ALTER DATABASE ADD STANDBY LOGFILE THREAD 1 (‘+FRA') SIZE 200M;
+ALTER DATABASE ADD STANDBY LOGFILE THREAD 1 (‘+FRA') SIZE 200M;
+ALTER DATABASE ADD STANDBY LOGFILE THREAD 2 (‘+FRA') SIZE 200M;
+ALTER DATABASE ADD STANDBY LOGFILE THREAD 2 (‘+FRA') SIZE 200M;
+ALTER DATABASE ADD STANDBY LOGFILE THREAD 2 (‘+FRA') SIZE 200M;
+
+#CHECK STANDBY REDO LOGS
+
+SQL> select group#,thread#,bytes from v$standby_log;
+
+#CREATE PFILE FROM SPFILE
+
+SQL> create pfile='/tmp/pfile.ora' from spfile;
+
+[oracle@node1 ~]$ more /tmp/pfile.ora
+
+#################/tmp/pfile.ora######################################
+*.audit_file_dest='/u01/app/oracle/database/19.3.0/admin/CDBTEST/adump'
+*.audit_trail='db'
+*.cluster_database=true
+*.compatible='19.0.0'
+*.control_files='+DATA/CDBTEST/CONTROLFILE/current.269.1065044601','+FRA/CDBTEST/CONTROLFILE/current.256.1065044603'
+*.db_block_size=8192
+*.db_create_file_dest='+DATA'
+*.db_file_name_convert='+DATA/CDBTESTDG/DATAFILE','+DATA/CDBTEST/DATAFILE','+FRA/CDBTESTDG/DATAFILE','+FRA/CDBTEST/DATAFILE'
+*.db_name='CDBTEST'
+*.db_recovery_file_dest='+FRA'
+*.db_recovery_file_dest_size=21474836480
+*.diagnostic_dest='/u01/app/oracle/database/19.3.0'
+*.dispatchers='(PROTOCOL=TCP) (SERVICE=CDBTESTXDB)'
+*.enable_pluggable_database=true
+*.fal_client='PRIMARY_CDBTEST'
+*.fal_server='STANDBY_CDBTEST'
+family:dw_helper.instance_mode='read-only'
+CDBTEST2.instance_number=2
+CDBTEST1.instance_number=1
+*.local_listener='(ADDRESS=(PROTOCOl=TCP)(HOST=192.168.63.34)(PORT=1521))'
+CDBTEST1.local_listener='(DESCRIPTION= (ADDRESS_LIST= (ADDRESS=(PROTOCOL=TCP)(HOST=node1-vip)(PORT=1550))))'
+CDBTEST2.local_listener='(DESCRIPTION= (ADDRESS_LIST= (ADDRESS=(PROTOCOL=TCP)(HOST=node2-vip)(PORT=1550))))'
+*.log_archive_config='DG_CONFIG=(CDBTEST,CDBTESTDG)'
+*.log_archive_dest_1='LOCATION=USE_DB_RECOVERY_FILE_DEST VALID_FOR=(ALL_LOGFILES,ALL_ROLES) DB_UNIQUE_NAME=CDBTEST'
+*.log_archive_dest_2='SERVICE=STANDBY_CDBTEST VALID_FOR=(ONLINE_LOGFILES,PRIMARY_ROLE) DB_UNIQUE_NAME=CDBTESTDG'
+*.log_archive_dest_state_2='ENABLE'
+*.log_archive_format='%t_%s_%r.arc'
+*.log_file_name_convert='+DATA/CDBTESTDG/ONLINELOG','+DATA/CDBTEST/ONLINELOG','+FRA/CDBTESTDG/ONLINELOG','+FRA/CDBTEST/ONLINELOG'
+*.nls_language='AMERICAN'
+*.nls_territory='AMERICA'
+*.open_cursors=300
+*.pga_aggregate_target=1204m
+*.processes=300
+*.remote_login_passwordfile='exclusive'
+*.sga_target=3612m
+*.standby_file_management='AUTO'
+CDBTEST2.thread=2
+CDBTEST1.thread=1
+CDBTEST2.undo_tablespace='UNDOTBS2'
+CDBTEST1.undo_tablespace='UNDOTBS1'
+################################################################################33
+
+#CREATE PASSWORD FILE
+[oracle@node1 ~]$ orapwd file=$ORACLE_HOME/dbs/orapwCDBTEST
+Enter password for SYS:
+[oracle@node1 ~]$
+
+
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~CONFIGURE PARAMETERS ON STANDBY SIDE~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+[oracle@node1 ~]$ cd $ORACLE_HOME/dbs
+
+oracle@node1 dbs]$ cp orapwCDBTEST orapwCDBTESTDG
+
+####################EDIT PFILE LIKE BELOW###################
+CHANGE *.audit_file_dest AS *.audit_file_dest='/u01/app/oracle/database/19.3.0/admin/CDBTESTDG/adump'
+CHANGE *.cluster_database AS *.cluster_database=false
+COMMENT *.control_files PARAMETER
+CHANGE *.control_files AS *.control_files='+DATA/CDBTESTDG/CONTROLFILE/current.269.1065044601','+FRA/CDBTESTDG/CONTROLFILE/current.256.1065044603'
+CHANGE *.db_file_name_convert AS *.db_file_name_convert='+DATA/CDBTEST/DATAFILE','+DATA/CDBTESTDG/DATAFILE','+FRA/CDBTEST/DATAFILE','+FRA/CDBTESTDG/DATAFILE'
+ADD *.db_unique_name after *.db_name AS *.db_unique_name='CDBTESTDG'
+CHANGE *.dispatchers AS *.dispatchers='(PROTOCOL=TCP) (SERVICE=CDBTESTDGXDB)'
+CHANGE *.fal_client AS *.fal_client='STANDBY_CDBTEST'
+CHANGE *.fal_server AS *.fal_server='PRIMARY_CDBTEST'
+CHANGE *.log_archive_dest_1 AS *.log_archive_dest_1='LOCATION=USE_DB_RECOVERY_FILE_DEST VALID_FOR=(ALL_LOGFILES,ALL_ROLES) DB_UNIQUE_NAME=CDBTESTDG'
+CHANGE *.log_archive_dest_2 AS *.log_archive_dest_2='SERVICE=PRIMARY_CDBTEST VALID_FOR=(ONLINE_LOGFILES,PRIMARY_ROLE) DB_UNIQUE_NAME=CDBTEST'
+CHANGE *.log_file_name_convert AS *.log_file_name_convert='+DATA/CDBTEST/ONLINELOG','+DATA/CDBTESTDG/ONLINELOG','+FRA/CDBTEST/ONLINELOG','+FRA/CDBTESTDG/ONLINELOG'
+CHANGE *.undo_tablespace AS *.undo_tablespace='UNDOTBS1'
+
+##########
+#NOTE: REMOVE TWO INITIALIZATION PARAMETERS (CONTROL_FILES & CLUSTER_DATABASE PARAMETERS)
+
+*.audit_file_dest='/u01/app/oracle/database/19.3.0/admin/CDBTESTDG/adump'
+*.audit_trail='db'
+*.cluster_database=false
+*.compatible='19.0.0'
+*.db_block_size=8192
+*.db_create_file_dest='+DATA'
+*.db_file_name_convert='+DATA/CDBTEST/DATAFILE','+DATA/CDBTESTDG/DATAFILE','+FRA/CDBTEST/DATAFILE','+FRA/CDBTESTDG/DATAFILE'
+*.db_name='CDBTEST'
+*.db_unique_name='CDBTESTDG'
+*.db_recovery_file_dest='+FRA'
+*.db_recovery_file_dest_size=21474836480
+*.diagnostic_dest='/u01/app/oracle/database/19.3.0'
+*.dispatchers='(PROTOCOL=TCP) (SERVICE=CDBTESTDGXDB)'
+*.enable_pluggable_database=true
+*.fal_client='STANDBY_CDBTEST'
+*.fal_server='PRIMARY_CDBTEST'
+family:dw_helper.instance_mode='read-only'
+*.local_listener='(ADDRESS=(PROTOCOl=TCP)(HOST=192.168.63.34)(PORT=1521))'
+*.log_archive_config='DG_CONFIG=(CDBTEST,CDBTESTDG)'
+*.log_archive_dest_1='LOCATION=USE_DB_RECOVERY_FILE_DEST VALID_FOR=(ALL_LOGFILES,ALL_ROLES) DB_UNIQUE_NAME=CDBTESTDG'
+*.log_archive_dest_2='SERVICE=PRIMARY_CDBTEST VALID_FOR=(ONLINE_LOGFILES,PRIMARY_ROLE) DB_UNIQUE_NAME=CDBTEST'
+*.log_archive_dest_state_2='ENABLE'
+*.log_archive_format='%t_%s_%r.arc'
+*.log_file_name_convert='+DATA/CDBTEST/ONLINELOG','+DATA/CDBTESTDG/ONLINELOG','+FRA/CDBTEST/ONLINELOG','+FRA/CDBTESTDG/ONLINELOG'
+*.nls_language='AMERICAN'
+*.nls_territory='AMERICA'
+*.open_cursors=300
+*.pga_aggregate_target=1204m
+*.processes=300
+*.remote_login_passwordfile='exclusive'
+*.sga_target=3612m
+*.standby_file_management='AUTO'
+*.undo_tablespace='UNDOTBS1'
+
+######################################################
+
+###CREATE AUDIT_FILE_DEST DIRECTORIES ON BOTH NODE
+
+[oracle@node1 ~]$ mkdir -p /u01/app/oracle/database/19.3.0/admin/CDBTESTDG/adump
+
+[oracle@node2 ~]$ mkdir -p /u01/app/oracle/database/19.3.0/admin/CDBTESTDG/adump
+
+###CREATE SPFILE FROM PFILE AND NOMOUNT THE DATABASE
+
+[oracle@node1 ~]$ export ORACLE_SID=CDBTESTDG
+[oracle@node1 ~]$ export ORACLE_BASE=/u01/app/oracle/database/19.3.0/
+[oracle@node1 ~]$ export ORACLE_HOME=/u01/app/oracle/database/19.3.0/dbhome_1
+[oracle@node1 ~]$ sqlplus / as sysdba
+
+SQL> create spfile from pfile='/tmp/pfile.ora';
+
+SQL> startup nomount;
+
+
+###TEST PRIMARY CONNECTION 
+
+[oracle@node1 ~]$ sqlplus sys/welcome1234@PRIMARY_CDBTEST as sysdba
+
+###TEST STANDBY CONNECTION
+
+[oracle@node1 ~]$ sqlplus sys/welcome1234@STANDBY_CDBTEST as sysdba
+
+
+#############INITIALIZE DATA GUARD########################
+
+[oracle@node1 ~]$ rman target sys@PRIMARY_CDBTEST auxiliary sys@STANDBY_CDBTEST
+
+RMAN> duplicate target database for standby from active database nofilenamecheck;
+
+RMAN> alter system register;
+
+Statement processed
+
+RMAN> exit
+
+
+###START DATA GUARD AS ACTIVE DATA GUARD
+
+[oracle@node1 ~]$ export ORACLE_SID=CDBTESTDG
+[oracle@node1 ~]$ export ORACLE_BASE=/u01/app/oracle/database/19.3.0/
+[oracle@node1 ~]$ export ORACLE_HOME=/u01/app/oracle/database/19.3.0/dbhome_1
+[oracle@node1 ~]$ sqlplus / as sysdba
+
+SQL> alter database open read only;
+
+Database altered.
+
+SQL> alter database recover managed standby database disconnect from session;
+
+Database altered.
+
+SQL> select name, open_mode, database_role, log_mode from v$database;
+
+###NOTE: In order to cancel MRP (Media Recovery Process), below command can be used.
+
+SQL> alter database recover managed standby database cancel;
+
+~~~~~~~~~~~~~~~~~~~~~~CHECK PRIMARY DATABASE ARCHIVELOG~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~`
+
+[oracle@node1 ~]$ sqlplus sys/welcome1234@PRIMARY_CDBTEST as sysdba
+
+SQL> select thread#,max(sequence#) from v$archived_log group by thread#;
+
+CREATE MANUALLY ARCHIVE LOG.
+
+SQL> alter system archive log current;
+
+System altered.
+
+SQL> /
+
+System altered.
+
+SQL> /
+
+System altered.
+
+SQL> /
+
+SQL> select thread#,max(sequence#) from v$archived_log group by thread#;
+
+###CHECK STANDBY DATABASE ARCHIVELOG
+
+[oracle@node1 ~]$ export ORACLE_SID=CDBTESTDG
+[oracle@node1 ~]$ export ORACLE_BASE=/u01/app/oracle/database/19.3.0/
+[oracle@node1 ~]$ export ORACLE_HOME=/u01/app/oracle/database/19.3.0/dbhome_1
+[oracle@node1 ~]$ sqlplus / as sysdba
+
+SQL> select thread#,max(sequence#) from v$archived_log where applied='YES' group by thread#;
+
+#TESTING THE DATA GUARD CONFIGURATION BETWEEN PRIMARY DATABASE AND PHYSICAL STANDBY DATABASE.
+
+#Create objects from primary database instance and check those objects in physical standby database.
+
+#CREATE OBJECTS IN PRIMARY DATABASE
+
+[oracle@node1 ~]$ sqlplus sys/welcome1234@PRIMARY_CDBTEST as sysdba
+
+SQL> CREATE TABLE SYS.TEST_NODE1_CDBTEST1 (ID NUMBER, NAME VARCHAR2(100));
+
+Table created.
+
+SQL> INSERT INTO SYS.TEST_NODE1_CDBTEST1 VALUES (1, ‘NODE1_CDBTEST1');
+
+1 row created.
+
+SQL> COMMIT;
+
+!!! Create manually archive log in order to see the row on physical standby database.
+!!! Because just one row is inserted !!!
+
+SQL> alter system archive log current;
+
+###CHECKING THE OBJECT FROM PHYSICAL STANDBY DATABASE
+
+[oracle@node1 ~]$ export ORACLE_SID=CDBTESTDG
+[oracle@node1 ~]$ export ORACLE_BASE=/u01/app/oracle/database/19.3.0/
+[oracle@node1 ~]$ export ORACLE_HOME=/u01/app/oracle/database/19.3.0/dbhome_1
+[oracle@node1 ~]$ sqlplus / as sysdba
+
+SQL> select name, open_mode, database_role, log_mode from v$database;
+
+NAME      OPEN_MODE            DATABASE_ROLE    LOG_MODE
+--------- -------------------- ---------------- ------------
+CDBTEST   READ ONLY WITH APPLY PHYSICAL STANDBY ARCHIVELOG
+
+
+ 
+
