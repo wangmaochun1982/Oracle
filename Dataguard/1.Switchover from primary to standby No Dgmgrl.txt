@@ -1,0 +1,72 @@
+#####################Switchover from primary to standby/ Switchover Primary : No Dgmgrl###############3
+On the STANDBY database
+
+1. Check archive_lag_target
+
+SQL> show parameters lag
+
+NAME TYPE VALUE ———————————— ———– —————————-
+archive_lag_target integer 0
+
+If non-zero set to zero using
+
+SQL> alter system set archive_lag_target=0 scope=both;
+
+
+On the PRIMARY database
+1. Shutdown RAC databases
+
+(RAC environment only) Shutdown all but one of the primary database instances.
+
+2. Verify it is possible to switchover
+
+SQL> SELECT SWITCHOVER_STATUS FROM V$DATABASE;
+
+return “TO STANDBY” 
+
+3. Initiate the switchover
+
+SQL> ALTER DATABASE COMMIT TO SWITCHOVER TO PHYSICAL STANDBY WITH SESSION SHUTDOWN;
+This converts the primary database to standby. 
+
+4. Shutdown, restart and mount as standby
+
+SQL> SHUTDOWN NORMAL;
+SQL> STARTUP NOMOUNT;
+SQL> ALTER DATABASE MOUNT STANDBY DATABASE;
+
+5. Verify switchover status
+
+SQL> SELECT SWITCHOVER_STATUS FROM V$DATABASE;
+ return “SWITCHOVER PENDING”
+ 
+ On the STANDBY database
+ 
+6. Switch standby database to primary
+
+SQL> ALTER DATABASE COMMIT TO SWITCHOVER TO PRIMARY ;
+
+7. Shutdown and restart the new primary database
+
+SQL> SHUTDOWN 
+
+SQL> STARTUP
+
+On the STANDBY database (the original primary)
+8. Start managed recovery and log apply services and set archive lag target
+
+SQL> ALTER SYSTEM SET ARCHIVE_LAG_TARGET=900 SCOPE=BOTH;
+SQL> ALTER DATABASE RECOVER MANAGED STANDBY DATABASE DISCONNECT FROM SESSION;
+
+On the PRIMARY database (the original standby)
+9. Begin archiving logs
+
+SQL> ALTER SYSTEM ARCHIVE LOG START;
+
+
+SQL> ALTER SYSTEM SWITCH LOGFILE;
+
+On BOTH databases
+10. Check the alert logs to make sure archived redo is being sent and received
+
+The primary alert log should look like this
