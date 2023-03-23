@@ -1,0 +1,106 @@
+1.设置memlock
+
+编辑/etc/security/limits.conf
+
+增加：
+```sql
+* Soft memlock 稍小于RAM值
+* hard memlock 稍小于RAM值
+```
+Memlock，锁定内存地址的大小，值大于sga没关系的，所以我们可以设置这个值在我们想要的SGA size和物理内存size之间，这个值得单位是kb
+
+验证
+ulimit -l
+104857600   --- 为memlock大小
+
+2.禁用AMM特性
+```sql
+SQL> show parameter target
+
+
+SQL> alter system set sga_max_size=640M scope=spfile sid='*';
+SQL> alter system set sga_target=640M scope=spfile sid='*';
+SQL> alter system set pga_aggregate_target=320M scope=spfile sid='*';
+SQL> alter system reset memory_max_target scope=spfile sid='*';
+SQL> alter system reset memory_target scope=spfile sid='*';
+```
+
+3.根据Oracle的脚本计算hugepage大小
+
+计算时要确保Oracle实例已经启动
+
+./hugepages_setting.sh
+
+hugepages_setting.sh脚本链接
+
+4.根据脚本的计算值在2个节点编辑/etc/sysctl.conf
+加入
+```sql
+vm.nr_hugepages = 30739
+```
+
+5.设置USE_LARGE_PAGES
+```sql
+ALTER SYSTEM SET use_large_pages=only SCOPE=SPFILE;
+SHUTDOWN IMMEDIATE;
+STARTUP;
+```
+
+alert日志显示
+```sql
+****************** Large Pages Information *****************
+
+Total Shared Global Region in Large Pages = 602 MB (100%)
+
+Large Pages used by this instance: 301 (602 MB)
+Large Pages unused system wide = 5 (10 MB) (alloc incr 4096 KB)
+Large Pages configured system wide = 306 (612 MB)
+Large Page size = 2048 KB
+***********************************************************
+
+
+```
+
+6.查看
+
+```sql
+# grep HugePages /proc/meminfo
+HugePages_Total:    1496
+HugePages_Free:      485
+HugePages_Rsvd:      446
+HugePages_Surp:        0
+```
+
+7.禁用透明大页
+ORACLE建议关闭透明大页的功能：透明大页会导致节点不可预料的重启，以及RAC的性能问题；
+透明大页也会导致单节点数据库环境发生不可预料的性能问题或延迟。
+```sql
+（1）查看是否开启
+# cat /sys/kernel/mm/transparent_hugepage/enabled
+[always] madvise never
+#
+[always]表示启用
+[never]表示禁用
+
+# grep AnonHugePages /proc/meminfo
+AnonHugePages:  20142080 kB
+
+（2）和（3）两种方法，优先选择（2）
+
+（2）修改文件/etc/grub.conf,添加一行：
+transparent_hugepage=never
+
+（3）修改文件/etc/rc.local文件，添加：
+if test -f /sys/kernel/mm/transparent_hugepage/enabled; then
+   echo never > /sys/kernel/mm/transparent_hugepage/enabled
+fi
+if test -f /sys/kernel/mm/transparent_hugepage/defrag; then
+   echo never > /sys/kernel/mm/transparent_hugepage/defrag
+fi
+
+
+```
+
+
+
+
