@@ -119,4 +119,32 @@ kill掉这个Oracle进程
   select pro.spid from v$session ses, v$process pro where ses.sid=XX and ses.paddr=pro.addr;
 ```
 
+###存储过程死锁
 
+
+```sql
+select object_name, machine, s.sid, s.serial#
+  from v$locked_object l, dba_objects o, v$session s
+ where l.object_id = o.object_id
+   and l.session_id = s.sid;
+
+
+alter system kill session '24,111'; (其中24,111分别是上面查询出的sid,serial#)
+kill该session （sid,serial#即为上面查出来的sid和serial#）
+注：此语句只是将该存储过程的状态由active改为了killed，并没有彻底的释放该存储过程，所以还是编译不了存储过程
+
+```
+
+要解决这一问题只能在OS上杀死这一线程（进程）了
+执行语句获得线程（进程）号
+
+```sql
+select spid, osuser, s.program
+  from v$session s, v$process p
+ where s.paddr = p.addr
+   and s.sid = 24
+
+在服务器上执行下列命令
+
+orakill sid   spid;
+```
